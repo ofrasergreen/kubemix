@@ -21,7 +21,7 @@ export const copyToClipboardIfEnabled = async (
   // In the future, check config.output.copyToClipboard or similar flag
   // For now, do nothing as clipboard copying is not in initial requirements
   logger.trace('Clipboard copy functionality not implemented yet');
-  
+
   // Return immediately - no clipboard functionality for now
   return Promise.resolve();
 };

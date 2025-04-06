@@ -36,8 +36,9 @@ export const fetchResourcesYaml = async (
   labelSelector?: string,
   fieldSelector?: string,
   kubeconfigPath?: string,
-  context?: string
-): Promise<Array<{ yaml: string; command: string }>> => { // Simplified return for now
+  context?: string,
+): Promise<Array<{ yaml: string; command: string }>> => {
+  // Simplified return for now
   const args = ['get', resourceType];
 
   if (names && names.length > 0) {
@@ -47,10 +48,9 @@ export const fetchResourcesYaml = async (
   if (namespace) {
     args.push('-n', namespace);
   } else if (namespace === null) {
-     // Fetch from all namespaces (kubectl default, but explicit here)
-     args.push('--all-namespaces'); // Or handle namespace filtering upstream
+    // Fetch from all namespaces (kubectl default, but explicit here)
+    args.push('--all-namespaces'); // Or handle namespace filtering upstream
   }
-
 
   if (labelSelector) {
     args.push('-l', labelSelector);
@@ -78,10 +78,13 @@ export const fetchResourcesYaml = async (
   } catch (error) {
     // Handle cases where the resource type might not exist in a specific namespace gracefully
     if (error instanceof Error && error.message.includes('NotFound')) {
-        logger.warn(`Resource type ${resourceType} not found in namespace ${namespace ?? 'all'}`);
-        return [];
+      logger.warn(`Resource type ${resourceType} not found in namespace ${namespace ?? 'all'}`);
+      return [];
     }
     logger.error(`Failed to fetch ${resourceType}:`, error);
-    throw new KubeAggregatorError(`Failed to fetch ${resourceType}: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
+    throw new KubeAggregatorError(
+      `Failed to fetch ${resourceType}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      500,
+    );
   }
 };

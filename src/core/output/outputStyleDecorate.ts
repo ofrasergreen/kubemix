@@ -38,7 +38,12 @@ export const generateHeader = (config: KubeAggregatorConfigMerged, generationDat
   const info = analyzeContent(config);
   let description = 'This file is an aggregated representation of Kubernetes resources from the cluster';
 
-  if (!info.selection.allNamespaces || info.selection.resourceTypes?.length || info.selection.labelSelector || info.selection.fieldSelector) {
+  if (
+    !info.selection.allNamespaces ||
+    info.selection.resourceTypes?.length ||
+    info.selection.labelSelector ||
+    info.selection.fieldSelector
+  ) {
     description += ', potentially filtered by namespace, resource type, or selectors';
   }
 
@@ -73,7 +78,10 @@ The content is organized as follows:
 };
 
 // Adapt usage guidelines
-export const generateSummaryUsageGuidelines = (config: KubeAggregatorConfigMerged, repositoryInstruction: string): string => {
+export const generateSummaryUsageGuidelines = (
+  config: KubeAggregatorConfigMerged,
+  repositoryInstruction: string,
+): string => {
   return `
 - This file contains potentially sensitive cluster configuration details. Handle it securely.
 - Resource definitions might be filtered based on the tool's configuration.
@@ -86,7 +94,7 @@ export const generateSummaryUsageGuidelines = (config: KubeAggregatorConfigMerge
 export const generateSummaryNotes = (config: KubeAggregatorConfigMerged): string => {
   const info = analyzeContent(config);
   const notes: string[] = [
-      '- Resource fetching depends on the Kubernetes context and permissions used to run the tool.',
+    '- Resource fetching depends on the Kubernetes context and permissions used to run the tool.',
   ];
 
   // Selection notes
@@ -99,18 +107,17 @@ export const generateSummaryNotes = (config: KubeAggregatorConfigMerged): string
     notes.push('- Resources might be filtered by namespace based on configuration.');
   }
 
-   if (filter.excludeNamespaces?.length) {
+  if (filter.excludeNamespaces?.length) {
     notes.push(`- Namespaces excluded: ${filter.excludeNamespaces.join(', ')}`);
   }
 
-   if (info.selection.resourceTypes?.length) {
-     notes.push(`- Included resource types: ${info.selection.resourceTypes.join(', ')}`);
-   }
+  if (info.selection.resourceTypes?.length) {
+    notes.push(`- Included resource types: ${info.selection.resourceTypes.join(', ')}`);
+  }
 
   if (filter.excludeResourceTypes?.length) {
-     notes.push(`- Excluded resource types: ${filter.excludeResourceTypes.join(', ')}`);
-   }
-
+    notes.push(`- Excluded resource types: ${filter.excludeResourceTypes.join(', ')}`);
+  }
 
   if (info.selection.labelSelector) {
     notes.push(`- Resources filtered by label selector: ${info.selection.labelSelector}`);

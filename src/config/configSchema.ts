@@ -30,7 +30,10 @@ const filterSchema = z.object({
   namespaces: z.array(z.string()).optional().describe('List of namespaces to include'),
   // Resource types to include (e.g., ['pods', 'services', 'deployments'])
   // If empty, potentially include all discoverable/supported types based on other filters.
-  includeResourceTypes: z.array(z.string()).optional().describe('List of resource types to include (e.g., pods, services)'),
+  includeResourceTypes: z
+    .array(z.string())
+    .optional()
+    .describe('List of resource types to include (e.g., pods, services)'),
   // Resource types to exclude
   excludeResourceTypes: z.array(z.string()).optional().describe('List of resource types to exclude'),
   // Namespaces to exclude (higher priority than include)

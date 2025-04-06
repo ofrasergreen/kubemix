@@ -4,7 +4,11 @@ import path from 'node:path';
 // import JSON5 from 'json5'; // Allow comments and trailing commas in config
 
 // Assuming these exist/are adapted
-import { KubeAggregatorError, KubeAggregatorConfigValidationError, rethrowValidationErrorIfZodError } from '../shared/errorHandle.js';
+import {
+  KubeAggregatorConfigValidationError,
+  KubeAggregatorError,
+  rethrowValidationErrorIfZodError,
+} from '../shared/errorHandle.js';
 import { logger } from '../shared/logger.js';
 // Use the specific Kubernetes config types/schemas
 import {
@@ -44,7 +48,9 @@ const loadAndValidateConfig = async (filePath: string): Promise<KubeAggregatorCo
       throw new KubeAggregatorError(`Error reading config file ${filePath}: ${error.message}`);
     }
     // Fallback for other errors
-    throw new KubeAggregatorError(`Failed to load config from ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new KubeAggregatorError(
+      `Failed to load config from ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 };
 
@@ -116,17 +122,23 @@ export const mergeConfigs = (
       if (Object.prototype.hasOwnProperty.call(source, key)) {
         const targetValue = target[key as keyof T];
         const sourceValue = source[key as keyof T];
-        if (typeof sourceValue === 'object' && sourceValue !== null && !Array.isArray(sourceValue) &&
-            typeof targetValue === 'object' && targetValue !== null && !Array.isArray(targetValue)) {
+        if (
+          typeof sourceValue === 'object' &&
+          sourceValue !== null &&
+          !Array.isArray(sourceValue) &&
+          typeof targetValue === 'object' &&
+          targetValue !== null &&
+          !Array.isArray(targetValue)
+        ) {
           target[key as keyof T] = deepMerge(targetValue as object, sourceValue as DeepPartial<object>) as T[keyof T];
         } else if (sourceValue !== undefined) {
           // Overwrite or set value if source has it (allows CLI to override file/defaults)
-           target[key as keyof T] = sourceValue as T[keyof T];
+          target[key as keyof T] = sourceValue as T[keyof T];
         }
       }
     }
     return target;
-  }
+  };
 
   // Merge file config
   merged = deepMerge(merged, fileConfig);
@@ -151,7 +163,9 @@ export const mergeConfigs = (
   } catch (error) {
     rethrowValidationErrorIfZodError(error, 'Invalid merged configuration');
     // Fallback for non-Zod errors during merge/parse
-    throw new KubeAggregatorError(`Configuration merging failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new KubeAggregatorError(
+      `Configuration merging failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 };
 
@@ -162,7 +176,7 @@ type DeepPartial<T> = {
 
 /**
  * Builds a partial configuration object from CLI options.
- * 
+ *
  * @param options - CLI options from command line parser
  * @returns A partial config object with CLI-specific settings
  */
@@ -190,7 +204,7 @@ export const buildCliConfig = (options: any): KubeAggregatorConfigCli => {
   }
 
   // Add other option mappings here as needed
-  
+
   // Validate the generated CLI config portion against its schema
   try {
     return kubeAggregatorConfigFileSchema.parse(cliConfig);

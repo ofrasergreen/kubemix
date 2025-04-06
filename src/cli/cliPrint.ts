@@ -10,12 +10,20 @@ export const printSummary = (
   namespaceCount: number,
   outputPath: string,
   config: KubeAggregatorConfigMerged, // Pass config for context if needed
+  podCount?: number, // Added for FRD-2
 ) => {
   logger.log(pc.white('📊 Aggregation Summary:'));
   logger.log(pc.dim('───────────────────────'));
   logger.log(`${pc.white('  Namespaces Found:')} ${pc.white(namespaceCount.toLocaleString())}`);
-  // Add more metrics here later (e.g., total resources, pods, services)
-  logger.log(`${pc.white('    Output File:')} ${pc.white(outputPath)}`);
+
+  // Show pod count if available
+  if (typeof podCount === 'number') {
+    logger.log(`${pc.white('       Pods Found:')} ${pc.white(podCount.toLocaleString())}`);
+  }
+
+  // Add more metrics here later (e.g., total resources, services, deployments)
+  logger.log(`${pc.white('     Output File:')} ${pc.white(outputPath)}`);
+
   // Add security check summary later if implemented
   // logger.log(`${pc.white('       Security:')} ${pc.white(securityCheckMessage)}`);
 };

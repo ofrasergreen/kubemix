@@ -5,10 +5,10 @@ import pc from 'picocolors'; // Using picocolors for lightweight coloring
 // Define log levels using an enum-like constant object
 export const kubeAggregatorLogLevels = {
   SILENT: -1, // No output at all
-  ERROR: 0,   // Only errors
-  WARN: 1,    // Errors and warnings
-  INFO: 2,    // Errors, warnings, and informational messages (default)
-  DEBUG: 3,   // All messages including debug and trace
+  ERROR: 0, // Only errors
+  WARN: 1, // Errors and warnings
+  INFO: 2, // Errors, warnings, and informational messages (default)
+  DEBUG: 3, // All messages including debug and trace
 } as const;
 
 export type KubeAggregatorLogLevel = (typeof kubeAggregatorLogLevels)[keyof typeof kubeAggregatorLogLevels];
@@ -95,7 +95,9 @@ class KubeAggregatorLogger {
   // Helper to format arguments, handling objects with util.inspect
   private formatArgs(args: unknown[]): string {
     return args
-      .map((arg) => (typeof arg === 'object' && arg !== null ? util.inspect(arg, { depth: null, colors: pc.isColorSupported }) : arg))
+      .map((arg) =>
+        typeof arg === 'object' && arg !== null ? util.inspect(arg, { depth: null, colors: pc.isColorSupported }) : arg,
+      )
       .join(' ');
   }
 }

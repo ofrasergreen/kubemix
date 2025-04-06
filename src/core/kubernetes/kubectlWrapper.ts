@@ -74,9 +74,8 @@ export const executeKubectlCommand = async (
       stderrOutput = error.stderr.trim();
       detailedError = `kubectl command failed: ${stderrOutput || errorMessage}`;
     } else {
-       detailedError = `kubectl command failed: ${errorMessage}`;
+      detailedError = `kubectl command failed: ${errorMessage}`;
     }
-
 
     // Throw a user-friendly error
     throw new KubectlError(detailedError, stderrOutput, commandString); // Use our specific error type
@@ -115,7 +114,10 @@ export const getNamespaceNames = async (kubeconfigPath?: string, context?: strin
     if (error instanceof KubeAggregatorError) {
       throw error;
     }
-    throw new KubeAggregatorError(`Failed to retrieve namespace names: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
+    throw new KubeAggregatorError(
+      `Failed to retrieve namespace names: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      500,
+    );
   }
 };
 
@@ -141,7 +143,94 @@ export const getNamespacesYaml = async (
     if (error instanceof KubeAggregatorError) {
       throw error;
     }
-    throw new KubeAggregatorError(`Failed to retrieve namespaces as YAML: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
+    throw new KubeAggregatorError(
+      `Failed to retrieve namespaces as YAML: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      500,
+    );
+  }
+};
+
+/**
+ * Fetches the names of all pods in a given namespace.
+ *
+ * @param namespace - The namespace to fetch pod names from.
+ * @param kubeconfigPath - Optional path to a specific kubeconfig file.
+ * @param context - Optional specific Kubernetes context to use.
+ * @returns A promise that resolves with an array of pod names.
+ */
+export const getPodNames = async (namespace: string, kubeconfigPath?: string, context?: string): Promise<string[]> => {
+  logger.debug(`Fetching pod names for namespace '${namespace}'...`);
+  const args = ['get', 'pods', '-n', namespace, '-o', 'name', '--no-headers=true'];
+
+  try {
+    const { stdout } = await executeKubectlCommand(args, kubeconfigPath, context);
+
+    // Handle empty case (no pods)
+    if (!stdout.trim()) {
+      logger.debug(`No pods found in namespace '${namespace}'.`);
+      return [];
+    }
+
+    // Parse the output (e.g., "pod/nginx-xyz\npod/redis-abc")
+    const names = stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean) // Remove empty lines
+      .map((line) => {
+        // Extract name after "pod/"
+        const parts = line.split('/');
+        return parts.length > 1 ? parts[1] : line;
+      });
+
+    logger.debug(`Found ${names.length} pods in namespace '${namespace}'.`);
+    return names;
+  } catch (error) {
+    // Log error but don't fail entirely - this is part of error handling in AC #9
+    logger.warn(`Failed to get pod names for namespace '${namespace}':`, error);
+
+    // Return empty array instead of throwing for resilience
+    return [];
+  }
+};
+
+/**
+ * Fetches the full YAML definition for all pods in a specific namespace.
+ *
+ * @param namespace - The namespace to fetch pod YAML from.
+ * @param kubeconfigPath - Optional path to a specific kubeconfig file.
+ * @param context - Optional specific Kubernetes context to use.
+ * @returns A promise resolving with the YAML content and the command used.
+ */
+export const getPodsYaml = async (
+  namespace: string,
+  kubeconfigPath?: string,
+  context?: string,
+): Promise<{ yaml: string; command: string }> => {
+  logger.debug(`Fetching pods YAML for namespace '${namespace}'...`);
+  const args = ['get', 'pods', '-n', namespace, '-o', 'yaml'];
+
+  try {
+    const { stdout, command } = await executeKubectlCommand(args, kubeconfigPath, context);
+
+    // If pods are found, the YAML will be non-empty
+    if (!stdout.trim() || stdout.includes('items: []') || stdout.includes('No resources found')) {
+      logger.debug(`No pods found in namespace '${namespace}'.`);
+      return { yaml: '', command };
+    }
+
+    return { yaml: stdout, command };
+  } catch (error) {
+    // Log error but don't fail entirely - this is part of error handling in AC #9
+    logger.warn(`Failed to get pods YAML for namespace '${namespace}':`, error);
+
+    // Create a command string for return value consistency
+    const commandStr = `kubectl get pods -n ${namespace} -o yaml`;
+    if (error instanceof KubectlError && error.command) {
+      return { yaml: '', command: error.command };
+    }
+
+    // Return empty YAML but with command string for consistency
+    return { yaml: '', command: commandStr };
   }
 };
 

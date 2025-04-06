@@ -7,7 +7,6 @@ import Handlebars from 'handlebars';
 import type { KubeAggregatorConfigMerged } from '../../config/configSchema.js';
 import { KubeAggregatorError } from '../../shared/errorHandle.js';
 import { logger } from '../../shared/logger.js';
-import { generateResourceTreeString } from './resourceTreeGenerate.js';
 import type { OutputGeneratorContext, RenderContext } from './outputGeneratorTypes.js';
 // Import adapted decorator functions
 import {
@@ -21,6 +20,7 @@ import {
 import { getMarkdownTemplate } from './outputStyles/markdownStyle.js';
 import { getPlainTemplate } from './outputStyles/plainStyle.js';
 import { getXmlTemplate } from './outputStyles/xmlStyle.js';
+import { generateResourceTreeString } from './resourceTreeGenerate.js';
 
 /**
  * Creates the context object needed for rendering the output template.
@@ -38,20 +38,28 @@ const createRenderContext = (outputGeneratorContext: OutputGeneratorContext): Re
     headerText: undefined, // Not implemented in v1
     instruction: outputGeneratorContext.instruction,
     resourceTreeString: outputGeneratorContext.resourceTreeString,
-    resourceKind: outputGeneratorContext.resourceKind,
-    kubectlCommand: outputGeneratorContext.kubectlCommand,
-    resourceYamlOutput: outputGeneratorContext.resourceYamlOutput,
+
+    // Multi-resource data
+    resources: outputGeneratorContext.resources,
+
     // Flags based on config (assuming these options exist or will be added)
     preambleEnabled: true, // Default to true for v1
     resourceTreeEnabled: true, // Default to true for v1
-    // resources: outputGeneratorContext.resources, // For future use
+
+    // Legacy fields for backward compatibility, will be deprecated
+    resourceKind: outputGeneratorContext.resourceKind,
+    kubectlCommand: outputGeneratorContext.kubectlCommand,
+    resourceYamlOutput: outputGeneratorContext.resourceYamlOutput,
   };
 };
 
 /**
  * Compiles and renders the output using Handlebars based on the chosen style.
  */
-const generateHandlebarOutput = async (config: KubeAggregatorConfigMerged, renderContext: RenderContext): Promise<string> => {
+const generateHandlebarOutput = async (
+  config: KubeAggregatorConfigMerged,
+  renderContext: RenderContext,
+): Promise<string> => {
   let templateString: string;
   // Ensure config.output and style exist
   const style = config.output?.style || 'markdown';
@@ -86,13 +94,16 @@ const generateHandlebarOutput = async (config: KubeAggregatorConfigMerged, rende
 
 /**
  * Main function to generate the final output string.
- * Adapts Repomix's generateOutput for the initial namespace feature.
+ * Adapted for multi-resource handling with namespaces and pods.
  */
 export const generateOutput = async (
   config: KubeAggregatorConfigMerged,
-  // --- Data specific to the initial namespace feature ---
+  // --- Data for resources ---
   namespaceNames: string[], // List of names for the tree
-  namespaceYamlData: { yaml: string; command: string }, // YAML and command for the main section
+  namespaceYamlData: { yaml: string; command: string }, // YAML and command for namespaces section
+  // --- Extended for FRD-2 ---
+  podsByNamespace?: Record<string, string[]>, // Map of namespace names to pod names arrays
+  podsYamlData?: Record<string, { yaml: string; command: string }>, // Map of namespace names to pods YAML data
   // --- Dependencies can be injected for testing ---
   deps = {
     buildOutputGeneratorContext,
@@ -105,9 +116,11 @@ export const generateOutput = async (
 
   // Build the main context object containing all data needed for generation
   const outputGeneratorContext = await deps.buildOutputGeneratorContext(
-      config,
-      namespaceNames,
-      namespaceYamlData,
+    config,
+    namespaceNames,
+    namespaceYamlData,
+    podsByNamespace,
+    podsYamlData,
   );
 
   // Create the specific context needed for Handlebars rendering
@@ -129,23 +142,51 @@ export const buildOutputGeneratorContext = async (
   config: KubeAggregatorConfigMerged,
   namespaceNames: string[],
   namespaceYamlData: { yaml: string; command: string },
+  podsByNamespace?: Record<string, string[]>,
+  podsYamlData?: Record<string, { yaml: string; command: string }>,
 ): Promise<OutputGeneratorContext> => {
   // For v1, we don't implement instruction files
   const repositoryInstruction = '';
 
-  // Generate the resource tree string (currently just a list of namespaces)
-  const resourceTreeStr = generateResourceTreeString(namespaceNames);
+  // Generate the resource tree string (now includes pods under namespaces)
+  const resourceTreeStr = generateResourceTreeString(namespaceNames, podsByNamespace);
+
+  // Build the resources array starting with namespaces
+  const resources: import('./outputGeneratorTypes').ResourceData[] = [
+    {
+      kind: 'Namespaces',
+      command: namespaceYamlData.command,
+      yaml: namespaceYamlData.yaml,
+    },
+  ];
+
+  // Add pod resources for each namespace with pods
+  if (podsYamlData) {
+    for (const namespace of namespaceNames) {
+      const podYamlData = podsYamlData[namespace];
+
+      // Only add if we have YAML data and it's not empty
+      if (podYamlData && podYamlData.yaml) {
+        resources.push({
+          kind: 'Pods',
+          namespace,
+          command: podYamlData.command,
+          yaml: podYamlData.yaml,
+        });
+      }
+    }
+  }
 
   return {
     generationDate: new Date().toISOString(),
     resourceTreeString: resourceTreeStr,
     config,
     instruction: repositoryInstruction,
-    // --- Data specific to the initial namespace feature ---
-    resourceKind: 'Namespaces', // Hardcoded for now
+    // Multi-resource data
+    resources,
+    // Legacy fields for backward compatibility
+    resourceKind: 'Namespaces',
     kubectlCommand: namespaceYamlData.command,
     resourceYamlOutput: namespaceYamlData.yaml,
-    // --- Placeholder for future ---
-    // resources: [], // Populate this when handling multiple resources
   };
 };

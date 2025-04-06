@@ -1,7 +1,7 @@
 // src/core/output/outputStyles/xmlStyle.ts
 export const getXmlTemplate = () => {
-    // Note: Adapt placeholders (e.g., generationHeader, summary*) from outputStyleDecorate.ts
-    return /* xml */ `
+  // Note: Adapt placeholders (e.g., generationHeader, summary*) from outputStyleDecorate.ts
+  return /* xml */ `
   {{{generationHeader}}}
 
   {{#if preambleEnabled}}
@@ -89,4 +89,4 @@ export const getXmlTemplate = () => {
 
   {{!-- End of Kubernetes Resource Aggregation --}}
   `;
-  };
+};

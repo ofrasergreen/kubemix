@@ -42,29 +42,22 @@ export const getMarkdownTemplate = () => {
 
 # Resources
 
-## Resource: {{resourceKind}}
+{{#each resources}}
+{{#if this.namespace}}
+## Resource: {{this.kind}} (Namespace: {{this.namespace}})
+{{else}}
+## Resource: {{this.kind}}
+{{/if}}
 \`\`\`bash
 # Command used to generate the output below:
-{{{kubectlCommand}}}
-\`\`\`
-
-\`\`\`yaml
-{{{resourceYamlOutput}}}
-\`\`\`
-
-{{!-- Placeholder for iterating over multiple resource types later --}}
-{{!--
-{{#each resources}}
-## Resource: {{this.kind}} ({{this.metadata.name}}{{#if this.metadata.namespace}} in {{this.metadata.namespace}}{{/if}})
-\`\`\`bash
-# Command used:
 {{{this.command}}}
 \`\`\`
+
 \`\`\`yaml
 {{{this.yaml}}}
 \`\`\`
+
 {{/each}}
---}}
 
 {{#if instruction}}
 # Instruction

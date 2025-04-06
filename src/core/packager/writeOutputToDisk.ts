@@ -1,9 +1,9 @@
 // src/core/packager/writeOutputToDisk.ts
-import { writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { KubeAggregatorConfigMerged } from '../../config/configSchema.js';
-import { logger } from '../../shared/logger.js';
 import { KubeAggregatorError } from '../../shared/errorHandle.js';
+import { logger } from '../../shared/logger.js';
 
 /**
  * Writes the generated output to disk at the specified path.
@@ -18,15 +18,15 @@ export const writeOutputToDisk = async (outputString: string, config: KubeAggreg
   if (!config.output || !config.output.filePath) {
     throw new KubeAggregatorError('Output file path is not defined in configuration');
   }
-  
+
   const outputPath = config.output.filePath;
   const absoluteOutputPath = path.isAbsolute(outputPath) ? outputPath : path.resolve(config.cwd, outputPath);
-  
+
   try {
     // Create the output directory if it doesn't exist
     const outputDir = path.dirname(absoluteOutputPath);
     await mkdir(outputDir, { recursive: true });
-    
+
     // Write the output file
     await writeFile(absoluteOutputPath, outputString, 'utf8');
     logger.debug(`Output written to: ${absoluteOutputPath}`);

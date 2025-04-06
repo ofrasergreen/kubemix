@@ -2,7 +2,7 @@
 import { z } from 'zod';
 
 // Assuming logger exists
-import { logger, kubeAggregatorLogLevels } from './logger.js';
+import { kubeAggregatorLogLevels, logger } from './logger.js';
 // import { KUBE_AGGREGATOR_ISSUES_URL, KUBE_AGGREGATOR_DISCORD_URL } from './constants.js'; // Add later if needed
 
 // Base custom error class for application-specific errors
@@ -42,7 +42,6 @@ export class KubectlError extends KubeAggregatorError {
   }
 }
 
-
 /**
  * Handles errors caught at the top level or during specific actions.
  * Logs the error appropriately and provides user feedback.
@@ -55,7 +54,7 @@ export const handleError = (error: unknown): void => {
     logger.error(`✖ ${error.message}`);
     // Include stderr for Kubectl errors if present
     if (error instanceof KubectlError && error.stderr) {
-        logger.error(`Command stderr:\n${error.stderr}`);
+      logger.error(`Command stderr:\n${error.stderr}`);
     }
     // Show stack trace only in debug mode for known errors
     if (logger.getLogLevel() >= kubeAggregatorLogLevels.DEBUG) {
@@ -67,16 +66,16 @@ export const handleError = (error: unknown): void => {
     // Always show stack trace for unexpected errors
     logger.note('Stack trace:', error.stack);
     if (logger.getLogLevel() < kubeAggregatorLogLevels.DEBUG) {
-       logger.log('');
-       logger.note('For more detailed information, run with the --verbose flag.');
+      logger.log('');
+      logger.note('For more detailed information, run with the --verbose flag.');
     }
   } else {
     // Handle non-Error exceptions
     logger.error('✖ An unknown error occurred.');
     logger.error('Error details:', error); // Log the unknown error itself
-     if (logger.getLogLevel() < kubeAggregatorLogLevels.DEBUG) {
-       logger.log('');
-       logger.note('For more detailed information, run with the --verbose flag.');
+    if (logger.getLogLevel() < kubeAggregatorLogLevels.DEBUG) {
+      logger.log('');
+      logger.note('For more detailed information, run with the --verbose flag.');
     }
   }
 

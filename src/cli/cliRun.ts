@@ -2,11 +2,11 @@ import process from 'node:process';
 import { Command, Option } from 'commander';
 import pc from 'picocolors';
 
+import { handleError } from '../shared/errorHandle.js'; // Assuming this exists
+import { kubeAggregatorLogLevels, logger } from '../shared/logger.js';
 // Import the namespace action
 import { runNamespacesAction } from './actions/namespaceAction.js';
 import type { CliOptions } from './types.js';
-import { handleError } from '../shared/errorHandle.js'; // Assuming this exists
-import { logger, kubeAggregatorLogLevels } from '../shared/logger.js';
 // import { getVersion } from '../core/kubernetes/kubeVersion.js'; // Placeholder for future version logic
 
 export const run = async () => {
