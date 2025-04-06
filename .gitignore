@@ -26,6 +26,11 @@ repomix-output.txt
 repomix-output.xml
 repomix-output.md
 
+# Kubemix output
+kubemix-output.txt
+kubemix-output.xml
+kubemix-output.md
+
 # ESLint cache
 .eslintcache
 

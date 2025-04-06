@@ -26,10 +26,8 @@
     "lint-secretlint": "secretlint \"**/*\" --secretlintignore .gitignore",
     "test": "vitest",
     "test-coverage": "vitest run --coverage",
-    "repomix": "npm run build && node --trace-warnings bin/repomix.cjs",
-    "repomix-src": "npm run repomix -- --include 'src,tests'",
-    "repomix-website": "npm run repomix -- --include 'website'",
-    "website": "docker compose -f website/compose.yml up --build",
+    "kubemix": "npm run build && node --trace-warnings bin/kubemix.cjs",
+    "kubemix-dev": "ts-node-dev --respawn --transpile-only src/cli/cliRun.ts",
     "npm-publish": "npm run lint && npm run test-coverage && npm run build && npm publish",
     "npm-release-patch": "npm version patch && npm run npm-publish",
     "npm-release-minor": "npm version minor && npm run npm-publish",
@@ -58,6 +56,8 @@
   },
   "dependencies": {
     "commander": "^13.1.0",
+    "handlebars": "^4.7.8",
+    "picocolors": "^1.0.0",
     "yaml": "^2.7.1",
     "zod": "^3.24.2"
   }

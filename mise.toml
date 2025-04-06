@@ -1,2 +1,3 @@
 [tools]
+kubectl = "latest"
 node = "23.9.0"
