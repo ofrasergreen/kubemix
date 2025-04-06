@@ -10,18 +10,33 @@ export const printSummary = (
   namespaceCount: number,
   outputPath: string,
   config: KubeAggregatorConfigMerged, // Pass config for context if needed
-  podCount?: number, // Added for FRD-2
+  podCount?: number, // Legacy from FRD-2
+  resourceCounts?: Record<string, number>, // Added for FRD-3
+  totalResourceCount?: number, // Added for FRD-3
 ) => {
   logger.log(pc.white('📊 Aggregation Summary:'));
   logger.log(pc.dim('───────────────────────'));
   logger.log(`${pc.white('  Namespaces Found:')} ${pc.white(namespaceCount.toLocaleString())}`);
 
-  // Show pod count if available
-  if (typeof podCount === 'number') {
+  // Show resource counts (FRD-3)
+  if (resourceCounts && totalResourceCount) {
+    logger.log(`${pc.white('Resources Found:')} ${pc.white(totalResourceCount.toLocaleString())} total resources`);
+
+    // Show counts for each type
+    const resourceTypes = Object.keys(resourceCounts).sort();
+    for (const type of resourceTypes) {
+      const count = resourceCounts[type];
+      if (count > 0) {
+        // Add padding for alignment
+        logger.log(`${pc.white(`        ${type}:`)} ${pc.white(count.toLocaleString())}`);
+      }
+    }
+  }
+  // Fallback to just showing pod count for backward compatibility (FRD-2)
+  else if (typeof podCount === 'number') {
     logger.log(`${pc.white('       Pods Found:')} ${pc.white(podCount.toLocaleString())}`);
   }
 
-  // Add more metrics here later (e.g., total resources, services, deployments)
   logger.log(`${pc.white('     Output File:')} ${pc.white(outputPath)}`);
 
   // Add security check summary later if implemented

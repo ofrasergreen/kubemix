@@ -9,8 +9,12 @@ import type { CliOptions } from '../types.js';
 // Result structure from the core aggregation logic
 export interface AggregationResult {
   namespaceCount: number;
-  podCount?: number; // Added for FRD-2, tracks total pods across all namespaces
-  // Add other relevant metrics later (service count, deployment count, total size, etc.)
+  // Legacy field from FRD-2
+  podCount?: number;
+  // New fields for FRD-3
+  resourceCounts?: Record<string, number>; // Map of resource kind to count
+  totalResourceCount?: number; // Total resources across all types
+  // Add other relevant metrics later (total size, etc.)
 }
 
 /**
@@ -39,7 +43,14 @@ export const runNamespacesAction = async (options: CliOptions): Promise<void> =>
 
   // --- Output Summary ---
   logger.log('');
-  printSummary(metrics.namespaceCount, config.output?.filePath || 'kubemix-output.md', config, metrics.podCount);
+  printSummary(
+    metrics.namespaceCount,
+    config.output?.filePath || 'kubemix-output.md',
+    config,
+    metrics.podCount,
+    metrics.resourceCounts,
+    metrics.totalResourceCount,
+  );
   logger.log('');
   printCompletion();
 };

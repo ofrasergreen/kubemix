@@ -11,15 +11,27 @@ export interface ResourceData {
   yaml: string; // The YAML content of the resource
 }
 
+/**
+ * Represents a block of YAML resources for a namespace.
+ * Used by FRD-3 to represent multiple resource types fetched at once from a namespace.
+ */
+export interface NamespaceResourceBlock {
+  namespace: string; // The namespace where these resources were fetched from
+  command: string; // The kubectl command used to fetch these resources
+  yaml: string; // The YAML content containing multiple resource types
+}
+
 // Data context for generating the entire output file
 export interface OutputGeneratorContext {
   generationDate: string;
-  resourceTreeString: string; // Represents the overview (e.g., namespace list with pods)
+  resourceTreeString: string; // Represents the overview (e.g., namespace list with multiple resource types)
   config: KubeAggregatorConfigMerged;
   instruction: string; // Content from instruction file
 
-  // New multi-resource structure
-  resources: ResourceData[];
+  // Resources can be a mix of:
+  // 1. ResourceData (for global resources like Namespaces)
+  // 2. NamespaceResourceBlock (for per-namespace resources from FRD-3)
+  resources: (ResourceData | NamespaceResourceBlock)[];
 
   // --- Legacy fields for backward compatibility, will be deprecated ---
   resourceKind?: string; // e.g., "Namespaces"
@@ -38,8 +50,10 @@ export interface RenderContext {
   readonly instruction: string;
   readonly resourceTreeString: string;
 
-  // New multi-resource structure
-  readonly resources: ReadonlyArray<ResourceData>;
+  // Resources can be a mix of:
+  // 1. ResourceData (for global resources like Namespaces)
+  // 2. NamespaceResourceBlock (for per-namespace resources from FRD-3)
+  readonly resources: ReadonlyArray<ResourceData | NamespaceResourceBlock>;
 
   // --- Flags based on config ---
   readonly preambleEnabled: boolean; // Controls if the summary section is included

@@ -43,10 +43,16 @@ export const getMarkdownTemplate = () => {
 # Resources
 
 {{#each resources}}
-{{#if this.namespace}}
-## Resource: {{this.kind}} (Namespace: {{this.namespace}})
+{{#if this.kind}}
+  {{!-- This is a single resource type (e.g., Namespaces) --}}
+  {{#if this.namespace}}
+  ## Resource: {{this.kind}} (Namespace: {{this.namespace}})
+  {{else}}
+  ## Resource: {{this.kind}}
+  {{/if}}
 {{else}}
-## Resource: {{this.kind}}
+  {{!-- This is a namespace block (FRD-3) with multiple resource types --}}
+  ## Resources in Namespace: {{this.namespace}}
 {{/if}}
 \`\`\`bash
 # Command used to generate the output below:

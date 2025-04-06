@@ -11,13 +11,17 @@ import * as clipboardCopier from './packager/copyToClipboardIfEnabled.js'; // As
 // import * as metricsCalculator from './metrics/calculateMetrics.js'; // Keep commented for now
 import * as outputWriter from './packager/writeOutputToDisk.js'; // Assuming adapted version
 
+// Use 'all' to fetch all common resource types at once
+const resourceTypeAll = 'all';
+
 // --- Shared Modules ---
 import { logger } from '../shared/logger.js';
 import type { ProgressCallback } from '../shared/types.js';
 
 /**
  * Orchestrates the process of aggregating Kubernetes resources.
- * Fetches namespaces and pods, generates output, and writes to disk/clipboard.
+ * Fetches namespaces and multiple resource types per namespace, 
+ * generates output, and writes to disk/clipboard.
  *
  * @param config - The merged configuration object.
  * @param progressCallback - Optional callback for reporting progress.
@@ -31,8 +35,8 @@ export const aggregateResources = async (
   deps = {
     getNamespaceNames: kubectlWrapper.getNamespaceNames,
     getNamespacesYaml: kubectlWrapper.getNamespacesYaml,
-    getPodNames: kubectlWrapper.getPodNames,
-    getPodsYaml: kubectlWrapper.getPodsYaml,
+    getResourcesByName: kubectlWrapper.getResourcesByName,
+    getResourcesYaml: kubectlWrapper.getResourcesYaml,
     generateOutput: outputGenerator.generateOutput,
     writeOutputToDisk: outputWriter.writeOutputToDisk,
     copyToClipboardIfEnabled: clipboardCopier.copyToClipboardIfEnabled,
@@ -63,45 +67,80 @@ export const aggregateResources = async (
     throw error;
   }
 
-  // --- 2. Fetch Pod Data for Each Namespace ---
-  progressCallback('Fetching pods for each namespace...');
-  logger.info('Starting to fetch pod data for each namespace...');
-
-  // Initialize data structures to store pod information
-  const podsByNamespace: Record<string, string[]> = {};
-  const podsYamlData: Record<string, { yaml: string; command: string }> = {};
-  let totalPods = 0;
-
-  // Use Promise.all to fetch pod data for all namespaces concurrently for better performance
+  // --- 2. Fetch Resource Data for Each Namespace ---
+  progressCallback('Fetching resources for each namespace...');
+  logger.info('Starting to fetch all resources for each namespace...');
+  
+  // Initialize data structures to store resource information
+  const resourcesByNamespace: Record<string, Record<string, string[]>> = {};
+  const fetchedYamlBlocks: Array<{ namespace: string; command: string; yaml: string }> = [];
+  
+  // Track resource counts by type - will be populated based on what we find
+  const totalResourceCounts: Record<string, number> = {};
+  
+  // Use Promise.all to fetch resource data for all namespaces concurrently for better performance
   await Promise.all(
     namespaceNames.map(async (namespace) => {
       try {
-        // Get pod names for the namespace
-        const podNames = await deps.getPodNames(namespace, kubeconfigPath, context);
-        podsByNamespace[namespace] = podNames;
-        totalPods += podNames.length;
-
-        // If there are pods, get the YAML data
-        if (podNames.length > 0) {
-          logger.debug(`Fetching YAML for ${podNames.length} pods in namespace '${namespace}'...`);
-          const yamlData = await deps.getPodsYaml(namespace, kubeconfigPath, context);
-          // Only store if we got valid YAML data back
+        // Get resource names by kind for the namespace using 'all'
+        const resourcesByKind = await deps.getResourcesByName(
+          namespace, 
+          [resourceTypeAll], 
+          kubeconfigPath, 
+          context
+        );
+        
+        // Store for the tree view
+        resourcesByNamespace[namespace] = resourcesByKind;
+        
+        // Count resources by type
+        for (const [kind, resources] of Object.entries(resourcesByKind)) {
+          // Initialize the counter for this kind if needed
+          if (totalResourceCounts[kind] === undefined) {
+            totalResourceCounts[kind] = 0;
+          }
+          totalResourceCounts[kind] += resources.length;
+        }
+        
+        // Get combined YAML for all resource types in this namespace
+        const hasAnyResources = Object.values(resourcesByKind).some(resources => resources.length > 0);
+        
+        if (hasAnyResources) {
+          logger.debug(`Fetching YAML for all resources in namespace '${namespace}'...`);
+          const yamlData = await deps.getResourcesYaml(
+            namespace, 
+            [resourceTypeAll], 
+            kubeconfigPath, 
+            context
+          );
+          
+          // Only add if we got valid YAML data back
           if (yamlData.yaml) {
-            podsYamlData[namespace] = yamlData;
+            fetchedYamlBlocks.push({
+              namespace,
+              command: yamlData.command,
+              yaml: yamlData.yaml,
+            });
           }
         } else {
-          logger.debug(`No pods found in namespace '${namespace}', skipping YAML fetch.`);
+          logger.debug(`No resources found in namespace '${namespace}', skipping YAML fetch.`);
         }
       } catch (error) {
-        // Log error but continue with other namespaces (error resilience as per AC #9)
-        logger.warn(`Error fetching pod data for namespace '${namespace}':`, error);
-        // Initialize with empty arrays for namespaces with errors
-        podsByNamespace[namespace] = [];
+        // Log error but continue with other namespaces (error resilience as per AC #10)
+        logger.warn(`Error fetching resource data for namespace '${namespace}':`, error);
+        // Initialize with empty objects for namespaces with errors
+        resourcesByNamespace[namespace] = {};
       }
     }),
   );
-
-  logger.info(`Completed pod data fetch. Found ${totalPods} total pods across ${namespaceNames.length} namespaces.`);
+  
+  // Log resource counts
+  const resourceSummary = Object.entries(totalResourceCounts)
+    .filter(([_, count]) => count > 0)
+    .map(([kind, count]) => `${count} ${kind}`)
+    .join(', ');
+  
+  logger.info(`Completed resource data fetch. Found ${resourceSummary} across ${namespaceNames.length} namespaces.`);
 
   // --- 3. Generate Output String ---
   progressCallback('Generating output file content...');
@@ -109,39 +148,52 @@ export const aggregateResources = async (
   logger.debug(`Using output style: ${style}`);
   let outputString: string;
   try {
-    outputString = await deps.generateOutput(config, namespaceNames, namespaceYamlData, podsByNamespace, podsYamlData);
+    outputString = await deps.generateOutput(
+        config,
+        namespaceNames,
+        namespaceYamlData,
+        resourcesByNamespace,
+        fetchedYamlBlocks
+    );
   } catch (error) {
-    logger.error('Failed to generate output content.', error);
-    throw error; // Propagate
+      logger.error('Failed to generate output content.', error);
+      throw error; // Propagate
   }
   logger.trace('Generated output string length:', outputString.length);
+
 
   // --- 4. Write Output to Disk ---
   const filePath = config.output?.filePath || 'kubemix-output.md';
   progressCallback(`Writing output to ${filePath}...`);
   try {
-    await deps.writeOutputToDisk(outputString, config);
-    logger.info(`Output successfully written to ${filePath}`);
+      await deps.writeOutputToDisk(outputString, config);
+      logger.info(`Output successfully written to ${filePath}`);
   } catch (error) {
-    logger.error(`Failed to write output file to ${filePath}`, error);
-    throw error; // Propagate
+      logger.error(`Failed to write output file to ${filePath}`, error);
+      throw error; // Propagate
   }
+
 
   // --- 5. Copy to Clipboard (Optional) ---
   // Assuming the adapted function checks config.output.copyToClipboard
   try {
-    await deps.copyToClipboardIfEnabled(outputString, progressCallback, config);
-  } catch (error) {
-    // Log clipboard error but don't fail the whole process
-    logger.warn(`Failed to copy output to clipboard: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      await deps.copyToClipboardIfEnabled(outputString, progressCallback, config);
+  } catch(error) {
+      // Log clipboard error but don't fail the whole process
+      logger.warn(`Failed to copy output to clipboard: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   // --- 6. Calculate Metrics ---
   progressCallback('Calculating metrics...');
+  
+  // Calculate total resources across all types
+  const totalResources = Object.values(totalResourceCounts).reduce((sum, count) => sum + count, 0);
+  
   const metrics: AggregationResult = {
     namespaceCount: namespaceNames.length,
-    podCount: totalPods,
-    // Add totalResources, totalYamlSize etc. later
+    resourceCounts: totalResourceCounts,
+    totalResourceCount: totalResources,
+    // Add totalYamlSize etc. later
   };
   logger.trace('Calculated metrics:', metrics);
 

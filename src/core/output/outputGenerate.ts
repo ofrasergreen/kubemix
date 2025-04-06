@@ -94,16 +94,18 @@ const generateHandlebarOutput = async (
 
 /**
  * Main function to generate the final output string.
- * Adapted for multi-resource handling with namespaces and pods.
+ * Adapted for multi-resource handling with multiple resource types per namespace.
  */
 export const generateOutput = async (
   config: KubeAggregatorConfigMerged,
   // --- Data for resources ---
   namespaceNames: string[], // List of names for the tree
   namespaceYamlData: { yaml: string; command: string }, // YAML and command for namespaces section
-  // --- Extended for FRD-2 ---
-  podsByNamespace?: Record<string, string[]>, // Map of namespace names to pod names arrays
-  podsYamlData?: Record<string, { yaml: string; command: string }>, // Map of namespace names to pods YAML data
+  // --- Extended for FRD-3 ---
+  resourcesByNamespace?: Record<string, Record<string, string[]>> | Record<string, string[]>, // Map of namespace names to resource types and names
+  fetchedYamlBlocks?:
+    | Array<{ namespace: string; command: string; yaml: string }>
+    | Record<string, { yaml: string; command: string }>, // YAML data for namespaces
   // --- Dependencies can be injected for testing ---
   deps = {
     buildOutputGeneratorContext,
@@ -119,8 +121,8 @@ export const generateOutput = async (
     config,
     namespaceNames,
     namespaceYamlData,
-    podsByNamespace,
-    podsYamlData,
+    resourcesByNamespace,
+    fetchedYamlBlocks,
   );
 
   // Create the specific context needed for Handlebars rendering
@@ -142,17 +144,23 @@ export const buildOutputGeneratorContext = async (
   config: KubeAggregatorConfigMerged,
   namespaceNames: string[],
   namespaceYamlData: { yaml: string; command: string },
-  podsByNamespace?: Record<string, string[]>,
-  podsYamlData?: Record<string, { yaml: string; command: string }>,
+  resourcesByNamespace?: Record<string, Record<string, string[]>> | Record<string, string[]>,
+  yamlData?:
+    | Array<{ namespace: string; command: string; yaml: string }>
+    | Record<string, { yaml: string; command: string }>,
 ): Promise<OutputGeneratorContext> => {
   // For v1, we don't implement instruction files
   const repositoryInstruction = '';
 
-  // Generate the resource tree string (now includes pods under namespaces)
-  const resourceTreeStr = generateResourceTreeString(namespaceNames, podsByNamespace);
+  // Generate the resource tree string with the appropriate resources
+  // Handle both FRD-3 and backward compatibility with FRD-2
+  const resourceTreeStr = generateResourceTreeString(namespaceNames, resourcesByNamespace);
 
-  // Build the resources array starting with namespaces
-  const resources: import('./outputGeneratorTypes').ResourceData[] = [
+  // Build the resources array starting with namespaces (global)
+  const resources: (
+    | import('./outputGeneratorTypes').ResourceData
+    | import('./outputGeneratorTypes').NamespaceResourceBlock
+  )[] = [
     {
       kind: 'Namespaces',
       command: namespaceYamlData.command,
@@ -160,13 +168,24 @@ export const buildOutputGeneratorContext = async (
     },
   ];
 
-  // Add pod resources for each namespace with pods
-  if (podsYamlData) {
+  // Handle FRD-3 style (array of namespace resource blocks)
+  if (Array.isArray(yamlData)) {
+    // These are namespace resource blocks from FRD-3
+    for (const block of yamlData) {
+      if (block.yaml) {
+        // Add these as namespace resource blocks
+        resources.push(block);
+      }
+    }
+  }
+  // Handle FRD-2 style (map of namespace to pod yaml data)
+  else if (yamlData && !Array.isArray(yamlData)) {
+    // Assume this is the old pod data format from FRD-2
     for (const namespace of namespaceNames) {
-      const podYamlData = podsYamlData[namespace];
+      const podYamlData = yamlData[namespace];
 
       // Only add if we have YAML data and it's not empty
-      if (podYamlData && podYamlData.yaml) {
+      if (podYamlData?.yaml) {
         resources.push({
           kind: 'Pods',
           namespace,

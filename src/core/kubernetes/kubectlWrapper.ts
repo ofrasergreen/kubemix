@@ -151,80 +151,164 @@ export const getNamespacesYaml = async (
 };
 
 /**
- * Fetches the names of all pods in a given namespace.
+ * Fetches the names of resources in a given namespace and organizes them by kind.
  *
- * @param namespace - The namespace to fetch pod names from.
+ * @param namespace - The namespace to fetch resources from.
+ * @param types - Array of resource types to fetch. Use ['all'] to fetch all common resource types.
  * @param kubeconfigPath - Optional path to a specific kubeconfig file.
  * @param context - Optional specific Kubernetes context to use.
- * @returns A promise that resolves with an array of pod names.
+ * @returns A promise that resolves with a record mapping resource kinds to arrays of resource names.
  */
-export const getPodNames = async (namespace: string, kubeconfigPath?: string, context?: string): Promise<string[]> => {
-  logger.debug(`Fetching pod names for namespace '${namespace}'...`);
-  const args = ['get', 'pods', '-n', namespace, '-o', 'name', '--no-headers=true'];
+export const getResourcesByName = async (
+  namespace: string,
+  types: string[],
+  kubeconfigPath?: string,
+  context?: string,
+): Promise<Record<string, string[]>> => {
+  // Check if we're using 'all' to get all resources
+  const isGetAll = types.includes('all');
+  if (isGetAll) {
+    logger.debug(`Fetching all resources by name for namespace '${namespace}'...`);
+  } else {
+    logger.debug(`Fetching resources (${types.join(',')}) by name for namespace '${namespace}'...`);
+  }
+
+  // Create empty result structure with empty arrays for each resource type
+  const result: Record<string, string[]> = {};
+  types.forEach((type) => {
+    // Store with normalized kind name
+    result[type] = [];
+  });
+
+  // If no types specified, return empty result
+  if (!types.length) {
+    return result;
+  }
+
+  // Build the kubectl command with comma-separated types
+  const typeList = types.join(',');
+  const args = ['get', typeList, '-n', namespace, '-o', 'name', '--no-headers=true'];
 
   try {
     const { stdout } = await executeKubectlCommand(args, kubeconfigPath, context);
 
-    // Handle empty case (no pods)
+    // Handle empty case (no resources)
     if (!stdout.trim()) {
-      logger.debug(`No pods found in namespace '${namespace}'.`);
-      return [];
+      logger.debug(`No resources found in namespace '${namespace}'.`);
+      return result;
     }
 
-    // Parse the output (e.g., "pod/nginx-xyz\npod/redis-abc")
-    const names = stdout
+    // Parse the output (e.g., "pod/nginx-xyz\nservice/svc-1\ndeployment.apps/deploy-1")
+    const lines = stdout
       .split('\n')
       .map((line) => line.trim())
-      .filter(Boolean) // Remove empty lines
-      .map((line) => {
-        // Extract name after "pod/"
-        const parts = line.split('/');
-        return parts.length > 1 ? parts[1] : line;
-      });
+      .filter(Boolean); // Remove empty lines
 
-    logger.debug(`Found ${names.length} pods in namespace '${namespace}'.`);
-    return names;
+    // Process each line and organize by kind
+    for (const line of lines) {
+      // Split by "/" to get kind and name
+      const parts = line.split('/');
+
+      if (parts.length < 2) {
+        logger.warn(`Unexpected format in resource name: ${line}`);
+        continue;
+      }
+
+      // Extract and normalize kind
+      let kind = parts[0];
+
+      // Handle special kinds with dots (e.g., deployment.apps -> deployments)
+      if (kind.includes('.')) {
+        const kindBase = kind.split('.')[0];
+
+        // Map to plural form based on the base name
+        const normalizedKinds: Record<string, string> = {
+          deployment: 'deployments',
+          replicaset: 'replicasets',
+          statefulset: 'statefulsets',
+          daemonset: 'daemonsets',
+          job: 'jobs',
+          cronjob: 'cronjobs',
+          // Add more special cases as needed
+        };
+
+        kind = normalizedKinds[kindBase] || `${kindBase}s`; // Default to adding 's'
+      }
+
+      // Ensure the kind exists in result
+      if (!result[kind]) {
+        result[kind] = [];
+      }
+
+      // Add the resource name
+      result[kind].push(parts[1]);
+    }
+
+    // Log summary of resources found
+    const totalResources = Object.values(result).reduce((sum, names) => sum + names.length, 0);
+    logger.debug(
+      `Found ${totalResources} resources across ${Object.keys(result).filter((k) => result[k].length > 0).length} kinds in namespace '${namespace}'.`,
+    );
+
+    return result;
   } catch (error) {
-    // Log error but don't fail entirely - this is part of error handling in AC #9
-    logger.warn(`Failed to get pod names for namespace '${namespace}':`, error);
+    // Log error but don't fail entirely
+    logger.warn(`Failed to get resource names for namespace '${namespace}':`, error);
 
-    // Return empty array instead of throwing for resilience
-    return [];
+    // Return initialized empty result for resilience
+    return result;
   }
 };
 
 /**
- * Fetches the full YAML definition for all pods in a specific namespace.
+ * Fetches the full YAML definition for resources in a specific namespace.
  *
- * @param namespace - The namespace to fetch pod YAML from.
+ * @param namespace - The namespace to fetch resource YAML from.
+ * @param types - Array of resource types to fetch. Use ['all'] to fetch all common resource types.
  * @param kubeconfigPath - Optional path to a specific kubeconfig file.
  * @param context - Optional specific Kubernetes context to use.
- * @returns A promise resolving with the YAML content and the command used.
+ * @returns A promise resolving with the combined YAML content and the command used.
  */
-export const getPodsYaml = async (
+export const getResourcesYaml = async (
   namespace: string,
+  types: string[],
   kubeconfigPath?: string,
   context?: string,
 ): Promise<{ yaml: string; command: string }> => {
-  logger.debug(`Fetching pods YAML for namespace '${namespace}'...`);
-  const args = ['get', 'pods', '-n', namespace, '-o', 'yaml'];
+  // Check if we're using 'all' to get all resources
+  const isGetAll = types.includes('all');
+  if (isGetAll) {
+    logger.debug(`Fetching YAML for all resources in namespace '${namespace}'...`);
+  } else {
+    logger.debug(`Fetching multi-resource YAML for types (${types.join(',')}) in namespace '${namespace}'...`);
+  }
+
+  // If no types specified, return empty result
+  if (!types.length) {
+    const commandStr = `kubectl get '' -n ${namespace} -o yaml`;
+    return { yaml: '', command: commandStr };
+  }
+
+  // Build the kubectl command with comma-separated types
+  const typeList = types.join(',');
+  const args = ['get', typeList, '-n', namespace, '-o', 'yaml'];
 
   try {
     const { stdout, command } = await executeKubectlCommand(args, kubeconfigPath, context);
 
-    // If pods are found, the YAML will be non-empty
+    // Check if any resources were found
     if (!stdout.trim() || stdout.includes('items: []') || stdout.includes('No resources found')) {
-      logger.debug(`No pods found in namespace '${namespace}'.`);
+      logger.debug(`No resources found for types (${types.join(',')}) in namespace '${namespace}'.`);
       return { yaml: '', command };
     }
 
     return { yaml: stdout, command };
   } catch (error) {
-    // Log error but don't fail entirely - this is part of error handling in AC #9
-    logger.warn(`Failed to get pods YAML for namespace '${namespace}':`, error);
+    // Log error but don't fail entirely
+    logger.warn(`Failed to get resource YAML for namespace '${namespace}':`, error);
 
     // Create a command string for return value consistency
-    const commandStr = `kubectl get pods -n ${namespace} -o yaml`;
+    const commandStr = `kubectl get ${types.join(',')} -n ${namespace} -o yaml`;
     if (error instanceof KubectlError && error.command) {
       return { yaml: '', command: error.command };
     }
