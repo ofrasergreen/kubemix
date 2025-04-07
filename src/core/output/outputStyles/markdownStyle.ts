@@ -17,7 +17,7 @@ export const getMarkdownTemplate = () => {
 4. Resource details, each consisting of:
   a. A header indicating the resource type (e.g., ## Resource: Namespaces)
   b. The exact kubectl command used to fetch the resource.
-  c. The full YAML output of the command in a code block.
+  c. The full output of the command in a code block.
 
 ## Usage Guidelines
 {{{summaryUsageGuidelines}}}
@@ -59,8 +59,8 @@ export const getMarkdownTemplate = () => {
 {{{this.command}}}
 \`\`\`
 
-\`\`\`yaml
-{{{this.yaml}}}
+\`\`\`
+{{{this.output}}}
 \`\`\`
 
 {{/each}}
@@ -74,5 +74,5 @@ export const getMarkdownTemplate = () => {
 `;
 };
 
-// Register helpers if needed (e.g., for formatting YAML or commands)
-// Handlebars.registerHelper('formatYaml', (yamlContent) => { ... });
+// Register helpers if needed (e.g., for formatting output or commands)
+// Handlebars.registerHelper('formatOutput', (outputContent) => { ... });

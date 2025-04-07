@@ -38,6 +38,8 @@ export const printSummary = (
   }
 
   logger.log(`${pc.white('     Output File:')} ${pc.white(outputPath)}`);
+  logger.log(`${pc.white('   Output Format:')} ${pc.white(config.kubernetes?.outputFormat || 'text')}`);
+  logger.log(`${pc.white('    Output Style:')} ${pc.white(config.output?.style || 'markdown')}`);
 
   // Add security check summary later if implemented
   // logger.log(`${pc.white('       Security:')} ${pc.white(securityCheckMessage)}`);

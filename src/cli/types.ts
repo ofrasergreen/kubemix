@@ -6,9 +6,10 @@ export interface CliOptions extends OptionValues {
   output?: string; // Path for the output file
   style?: string; // Output style (e.g., 'markdown', 'xml', 'plain') - defaulting to markdown for now
 
-  // Kubernetes Specific Options (Placeholders for now)
+  // Kubernetes Specific Options
   kubeconfig?: string; // Path to kubeconfig file
   context?: string; // Kubernetes context to use
+  format?: string; // Output format for kubectl commands (text, yaml, json)
 
   // Configuration Options
   config?: string; // Path to a custom config file

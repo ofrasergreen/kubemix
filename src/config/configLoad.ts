@@ -202,6 +202,15 @@ export const buildCliConfig = (options: any): KubeAggregatorConfigCli => {
   if (options.context) {
     cliConfig.kubernetes = { ...cliConfig.kubernetes, context: options.context };
   }
+  if (options.format) {
+    // Basic validation, schema will do more thorough check
+    const validFormats = ['text', 'yaml', 'json'];
+    if (validFormats.includes(options.format.toLowerCase())) {
+      cliConfig.kubernetes = { ...cliConfig.kubernetes, outputFormat: options.format.toLowerCase() as any };
+    } else {
+      logger.warn(`Invalid kubectl output format specified: ${options.format}. Defaulting to text.`);
+    }
+  }
 
   // Add other option mappings here as needed
 

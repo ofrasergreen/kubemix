@@ -13,7 +13,7 @@ export interface FetchedResource {
     namespace?: string;
     // Other relevant metadata can be added later
   };
-  yaml: string; // Full YAML manifest
+  output: string; // Full resource output
   command: string; // Command used to fetch
 }
 
@@ -29,7 +29,7 @@ export interface FetchedResource {
  * @param context - Optional specific Kubernetes context to use.
  * @returns A promise resolving with an array of fetched resource details.
  */
-export const fetchResourcesYaml = async (
+export const fetchResourcesOutput = async (
   resourceType: string,
   namespace?: string | null, // Use null to signify all allowed namespaces explicitly
   names?: string[],
@@ -37,7 +37,8 @@ export const fetchResourcesYaml = async (
   fieldSelector?: string,
   kubeconfigPath?: string,
   context?: string,
-): Promise<Array<{ yaml: string; command: string }>> => {
+  outputFormat: 'text' | 'yaml' | 'json' = 'text',
+): Promise<Array<{ output: string; command: string }>> => {
   // Simplified return for now
   const args = ['get', resourceType];
 
@@ -58,9 +59,12 @@ export const fetchResourcesYaml = async (
   if (fieldSelector) {
     args.push('--field-selector', fieldSelector);
   }
-  args.push('-o', 'yaml');
+  const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
+  args.push('-o', outputFlag);
 
-  logger.debug(`Fetching YAML for ${resourceType} (ns: ${namespace ?? 'all'}, names: ${names?.join(',') ?? 'all'})...`);
+  logger.debug(
+    `Fetching ${outputFormat} output for ${resourceType} (ns: ${namespace ?? 'all'}, names: ${names?.join(',') ?? 'all'})...`,
+  );
 
   try {
     // Limitation: This fetches all matching resources as a single multi-document YAML.
@@ -68,13 +72,13 @@ export const fetchResourcesYaml = async (
     // or parse the multi-document YAML stream. For simplicity now, we fetch all at once.
     const { stdout, command } = await executeKubectlCommand(args, kubeconfigPath, context);
 
-    // TODO: If multiple resources are fetched, stdout will be multi-document YAML.
+    // TODO: If multiple resources are fetched, stdout will be multi-document output.
     // For now, we just return the whole blob. Later, this might need splitting.
     if (!stdout.trim()) {
       return []; // No resources found
     }
 
-    return [{ yaml: stdout, command }];
+    return [{ output: stdout, command }];
   } catch (error) {
     // Handle cases where the resource type might not exist in a specific namespace gracefully
     if (error instanceof Error && error.message.includes('NotFound')) {

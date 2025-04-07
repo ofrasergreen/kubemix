@@ -67,6 +67,14 @@ kubemix --style xml
 kubemix --style plain
 ```
 
+Specify kubectl output format:
+
+```bash
+kubemix --format text  # default (equivalent to kubectl -o wide)
+kubemix --format yaml  # kubectl -o yaml
+kubemix --format json  # kubectl -o json
+```
+
 Specify kubeconfig or context:
 
 ```bash
@@ -91,26 +99,15 @@ kube-system
 ## Resource: Namespaces
 ```bash
 # Command used to generate the output below:
-kubectl get namespaces -o yaml
+kubectl get namespaces -o wide
 ```
 
-```yaml
-apiVersion: v1
-items:
-- apiVersion: v1
-  kind: Namespace
-  metadata:
-    name: namespace-a
-  ...
-- apiVersion: v1
-  kind: Namespace
-  metadata:
-    name: namespace-b
-  ...
+```
+NAME          STATUS    AGE   LABELS
+namespace-a   Active    14d   kubernetes.io/metadata.name=namespace-a
+namespace-b   Active    7d    kubernetes.io/metadata.name=namespace-b
+kube-system   Active    30d   kubernetes.io/metadata.name=kube-system
 ...
-kind: List
-metadata:
-  resourceVersion: ""
 ```
 
 ## 🤝 Contributing

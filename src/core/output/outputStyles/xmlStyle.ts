@@ -17,7 +17,7 @@ export const getXmlTemplate = () => {
   4. Kubernetes resources, each consisting of:
     - Resource kind, name, and namespace as attributes.
     - The kubectl command used to fetch the resource.
-    - The full YAML manifest of the resource.
+    - The full output of the resource.
   </file_format>
 
   <usage_guidelines>
@@ -46,7 +46,7 @@ export const getXmlTemplate = () => {
   {{/if}}
 
   <resources>
-  This section contains the YAML manifests of the aggregated Kubernetes resources.
+  This section contains the output of the aggregated Kubernetes resources.
 
   <resource kind="{{resourceKind}}">
     <command_used>
@@ -56,7 +56,7 @@ export const getXmlTemplate = () => {
     </command_used>
     <manifest>
       <![CDATA[
-  {{{resourceYamlOutput}}}
+  {{{resourceOutput}}}
       ]]>
     </manifest>
   </resource>
@@ -72,7 +72,7 @@ export const getXmlTemplate = () => {
     </command_used>
     <manifest>
       <![CDATA[
-  {{{this.yaml}}}
+  {{{this.output}}}
       ]]>
     </manifest>
   </resource>

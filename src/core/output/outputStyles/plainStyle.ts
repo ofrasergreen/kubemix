@@ -25,7 +25,7 @@ File Format:
   b. Resource kind indication (e.g., Resource: Namespaces)
   c. The kubectl command used
   d. Another separator line
-  e. The full YAML output of the command
+  e. The full output of the command
   f. A blank line
 
 Usage Guidelines:
@@ -59,7 +59,7 @@ ${PLAIN_SEPARATOR}
 Resource: {{resourceKind}}
 Command Used: {{{kubectlCommand}}}
 ${PLAIN_SEPARATOR}
-{{{resourceYamlOutput}}}
+{{{resourceOutput}}}
 
 
 {{!-- Placeholder for iterating over multiple resource types later --}}
@@ -69,7 +69,7 @@ ${PLAIN_SEPARATOR}
 Resource: {{this.kind}} ({{this.metadata.name}}{{#if this.metadata.namespace}} in {{this.metadata.namespace}}{{/if}})
 Command Used: {{{this.command}}}
 ${PLAIN_SEPARATOR}
-{{{this.yaml}}}
+{{{this.output}}}
 
 {{/each}}
 --}}

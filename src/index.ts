@@ -7,7 +7,7 @@ export { run } from './cli/cliRun.js';
 // Export the core functions for programmatic access
 export { aggregateResources } from './core/packager.js';
 export { generateOutput } from './core/output/outputGenerate.js';
-export { getNamespacesYaml, getNamespaceNames } from './core/kubernetes/kubectlWrapper.js';
+export { getNamespacesOutput, getNamespaceNames } from './core/kubernetes/kubectlWrapper.js';
 
 // Export configuration-related types for programmatic access
 export type { KubeAggregatorConfigMerged } from './config/configSchema.js';

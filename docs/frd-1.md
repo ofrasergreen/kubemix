@@ -10,15 +10,15 @@ This builds upon the project structure and tooling setup established in Phase 1,
 
 1.  Running `kube-aggregator` (or a specific command like `kube-aggregator namespaces`) executes successfully.
 2.  The tool runs `kubectl get namespaces -o name` to get a list of namespace names.
-3.  The tool runs `kubectl get namespaces -o yaml` to get the full YAML output.
+3.  The tool runs `kubectl get namespaces -o wide` to get the detailed tabular output.
 4.  A Markdown file (defaulting to `kubemix-output.md` or configurable via `--output`) is generated.
 5.  The Markdown file contains the following sections in order:
     *   A preamble section (similar to Repomix's `file_summary`) explaining the file's purpose (aggregating Kubernetes resources).
     *   A "Cluster Resource Tree" section (similar to Repomix's `directory_structure`) containing a simple list of discovered namespace names (one per line).
     *   A "Resources" section containing:
         *   A heading indicating the resource type (e.g., `## Resource: Namespaces`).
-        *   The exact `kubectl` command used to fetch the YAML (e.g., `kubectl get namespaces -o yaml`).
-        *   The full YAML output from the command within a YAML code block.
+        *   The exact `kubectl` command used to fetch the data (e.g., `kubectl get namespaces -o wide`).
+        *   The full tabular output from the command within a code block.
 
 **Implementation Steps:**
 

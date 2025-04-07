@@ -20,6 +20,7 @@ export const run = async () => {
       .option('--style <type>', 'Specify the output style (default: markdown)')
       .option('--kubeconfig <path>', 'Path to the kubeconfig file')
       .option('--context <name>', 'Kubernetes context to use')
+      .option('--format <format>', 'Specify kubectl output format (default: text, options: text, yaml, json)')
       .option('-c, --config <path>', 'Path to a custom config file')
       .addOption(new Option('--verbose', 'Enable verbose logging').conflicts('quiet'))
       .addOption(new Option('--quiet', 'Disable informational output').conflicts('verbose'))

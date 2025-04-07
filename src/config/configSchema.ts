@@ -15,10 +15,15 @@ export const defaultFilePathMap: Record<KubeAggregatorOutputStyle, string> = {
 
 // --- Kubernetes Configuration ---
 
+// Define possible kubectl output formats
+export const kubectlOutputFormatSchema = z.enum(['text', 'yaml', 'json']);
+export type KubectlOutputFormat = z.infer<typeof kubectlOutputFormatSchema>;
+
 // Schema for Kubernetes connection/targeting options
 const kubernetesConfigSchema = z.object({
   kubeconfigPath: z.string().optional().describe('Path to the kubeconfig file'),
   context: z.string().optional().describe('Specific Kubernetes context to use'),
+  outputFormat: kubectlOutputFormatSchema.optional().describe('Output format for kubectl commands'),
   // Add more specific Kube options later (e.g., cluster URL, token)
 });
 
@@ -86,7 +91,11 @@ export const kubeAggregatorConfigDefaultSchema = z.object({
       // resourceTree: z.boolean().default(true),
     })
     .default({}), // Provide default object if output is undefined
-  kubernetes: kubernetesConfigSchema.default({}),
+  kubernetes: kubernetesConfigSchema
+    .extend({
+      outputFormat: kubectlOutputFormatSchema.default('text'),
+    })
+    .default({}),
   filter: filterSchema
     .extend({
       // Default exclusions (can be overridden)

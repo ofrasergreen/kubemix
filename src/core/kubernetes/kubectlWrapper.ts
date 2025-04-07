@@ -122,29 +122,35 @@ export const getNamespaceNames = async (kubeconfigPath?: string, context?: strin
 };
 
 /**
- * Fetches the full YAML definition for all accessible namespaces.
+ * Fetches the definition for all accessible namespaces in the specified format.
  *
  * @param kubeconfigPath - Optional path to a specific kubeconfig file.
  * @param context - Optional specific Kubernetes context to use.
- * @returns A promise resolving with the YAML content and the command used.
+ * @param outputFormat - Optional output format (text, yaml, json). Defaults to text (which is -o wide).
+ * @returns A promise resolving with the output content and the command used.
  */
-export const getNamespacesYaml = async (
+export const getNamespacesOutput = async (
   kubeconfigPath?: string,
   context?: string,
-): Promise<{ yaml: string; command: string }> => {
-  logger.debug('Fetching namespaces YAML...');
-  const args = ['get', 'namespaces', '-o', 'yaml'];
+  outputFormat: 'text' | 'yaml' | 'json' = 'text',
+): Promise<{ output: string; command: string }> => {
+  logger.debug(`Fetching namespaces in ${outputFormat} format...`);
+
+  // Map the outputFormat to kubectl output flag
+  const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
+  const args = ['get', 'namespaces', '-o', outputFlag];
+
   try {
     const { stdout, command } = await executeKubectlCommand(args, kubeconfigPath, context);
-    return { yaml: stdout, command };
+    return { output: stdout, command };
   } catch (error) {
-    logger.error('Failed to get namespaces YAML:', error);
+    logger.error('Failed to get namespaces data:', error);
     // Re-throw the error if it's already our type, otherwise wrap it
     if (error instanceof KubeAggregatorError) {
       throw error;
     }
     throw new KubeAggregatorError(
-      `Failed to retrieve namespaces as YAML: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      `Failed to retrieve namespaces data: ${error instanceof Error ? error.message : 'Unknown error'}`,
       500,
     );
   }
@@ -261,60 +267,69 @@ export const getResourcesByName = async (
 };
 
 /**
- * Fetches the full YAML definition for resources in a specific namespace.
+ * Fetches the definition for resources in a specific namespace using the specified format.
  *
- * @param namespace - The namespace to fetch resource YAML from.
+ * @param namespace - The namespace to fetch resources from.
  * @param types - Array of resource types to fetch. Use ['all'] to fetch all common resource types.
  * @param kubeconfigPath - Optional path to a specific kubeconfig file.
  * @param context - Optional specific Kubernetes context to use.
- * @returns A promise resolving with the combined YAML content and the command used.
+ * @param outputFormat - Optional output format (text, yaml, json). Defaults to text (which is -o wide).
+ * @returns A promise resolving with the output content and the command used.
  */
-export const getResourcesYaml = async (
+export const getResourcesOutput = async (
   namespace: string,
   types: string[],
   kubeconfigPath?: string,
   context?: string,
-): Promise<{ yaml: string; command: string }> => {
+  outputFormat: 'text' | 'yaml' | 'json' = 'text',
+): Promise<{ output: string; command: string }> => {
   // Check if we're using 'all' to get all resources
   const isGetAll = types.includes('all');
   if (isGetAll) {
-    logger.debug(`Fetching YAML for all resources in namespace '${namespace}'...`);
+    logger.debug(`Fetching ${outputFormat} output for all resources in namespace '${namespace}'...`);
   } else {
-    logger.debug(`Fetching multi-resource YAML for types (${types.join(',')}) in namespace '${namespace}'...`);
+    logger.debug(`Fetching ${outputFormat} output for types (${types.join(',')}) in namespace '${namespace}'...`);
   }
 
   // If no types specified, return empty result
   if (!types.length) {
-    const commandStr = `kubectl get '' -n ${namespace} -o yaml`;
-    return { yaml: '', command: commandStr };
+    const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
+    const commandStr = `kubectl get '' -n ${namespace} -o ${outputFlag}`;
+    return { output: '', command: commandStr };
   }
 
   // Build the kubectl command with comma-separated types
   const typeList = types.join(',');
-  const args = ['get', typeList, '-n', namespace, '-o', 'yaml'];
+  const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
+  const args = ['get', typeList, '-n', namespace, '-o', outputFlag];
 
   try {
     const { stdout, command } = await executeKubectlCommand(args, kubeconfigPath, context);
 
     // Check if any resources were found
-    if (!stdout.trim() || stdout.includes('items: []') || stdout.includes('No resources found')) {
+    if (
+      !stdout.trim() ||
+      (outputFormat === 'yaml' && stdout.includes('items: []')) ||
+      (outputFormat === 'json' && stdout.includes('"items": []')) ||
+      stdout.includes('No resources found')
+    ) {
       logger.debug(`No resources found for types (${types.join(',')}) in namespace '${namespace}'.`);
-      return { yaml: '', command };
+      return { output: '', command };
     }
 
-    return { yaml: stdout, command };
+    return { output: stdout, command };
   } catch (error) {
     // Log error but don't fail entirely
-    logger.warn(`Failed to get resource YAML for namespace '${namespace}':`, error);
+    logger.warn(`Failed to get resource data for namespace '${namespace}':`, error);
 
     // Create a command string for return value consistency
-    const commandStr = `kubectl get ${types.join(',')} -n ${namespace} -o yaml`;
+    const commandStr = `kubectl get ${types.join(',')} -n ${namespace} -o ${outputFlag}`;
     if (error instanceof KubectlError && error.command) {
-      return { yaml: '', command: error.command };
+      return { output: '', command: error.command };
     }
 
-    // Return empty YAML but with command string for consistency
-    return { yaml: '', command: commandStr };
+    // Return empty data but with command string for consistency
+    return { output: '', command: commandStr };
   }
 };
 

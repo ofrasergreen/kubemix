@@ -12,17 +12,17 @@ This builds upon the existing structure for fetching namespaces and generating M
 2.  The tool first fetches all namespace names (using the existing `getNamespaceNames` logic).
 3.  The tool then *iterates* through the discovered namespaces.
 4. For each namespace, the tool executes kubectl get pods -n <namespace> -o name to get pod names within that namespace.
-5.  For *each* namespace, the tool executes `kubectl get pods -n <namespace> -o yaml` to get the full YAML output for pods in that namespace.
+5.  For *each* namespace, the tool executes `kubectl get pods -n <namespace> -o wide` to get the detailed tabular output for pods in that namespace.
 6.  The Markdown output file (e.g., `kubemix-output.md`) is generated successfully.
 7.  The output file contains:
     *   The existing Preamble section.
     *   An updated "Cluster Resource Overview" section displaying namespaces, with the names of the pods within each namespace listed and indented underneath (as shown in the example below).
     *   The "Resources" section now contains:
-        *   The original block for `Resource: Namespaces` (including command and full YAML).
+        *   The original block for `Resource: Namespaces` (including command and tabular output).
         *   *Multiple* subsequent blocks, one for each namespace containing pods, formatted as:
             *   Heading: `## Resource: Pods (Namespace: <namespace-name>)`
-            *   Command block showing: `kubectl get pods -n <namespace-name> -o yaml`
-            *   YAML code block containing the *full YAML output* for pods in that namespace.
+            *   Command block showing: `kubectl get pods -n <namespace-name> -o wide`
+            *   Code block containing the tabular output for pods in that namespace.
 8.  Namespaces with no pods should still appear in the Resource Overview tree but should not generate a "Resource: Pods" block in the main Resources section.
 9.  Error handling is implemented: If fetching pods for a *specific* namespace fails, an error/warning should be logged, but the process should continue for other namespaces.
 

@@ -49,7 +49,7 @@ const createRenderContext = (outputGeneratorContext: OutputGeneratorContext): Re
     // Legacy fields for backward compatibility, will be deprecated
     resourceKind: outputGeneratorContext.resourceKind,
     kubectlCommand: outputGeneratorContext.kubectlCommand,
-    resourceYamlOutput: outputGeneratorContext.resourceYamlOutput,
+    resourceOutput: outputGeneratorContext.resourceOutput,
   };
 };
 
@@ -100,12 +100,12 @@ export const generateOutput = async (
   config: KubeAggregatorConfigMerged,
   // --- Data for resources ---
   namespaceNames: string[], // List of names for the tree
-  namespaceYamlData: { yaml: string; command: string }, // YAML and command for namespaces section
+  namespaceData: { output: string; command: string }, // Output and command for namespaces section
   // --- Extended for FRD-3 ---
   resourcesByNamespace?: Record<string, Record<string, string[]>> | Record<string, string[]>, // Map of namespace names to resource types and names
-  fetchedYamlBlocks?:
-    | Array<{ namespace: string; command: string; yaml: string }>
-    | Record<string, { yaml: string; command: string }>, // YAML data for namespaces
+  fetchedOutputBlocks?:
+    | Array<{ namespace: string; command: string; output: string }>
+    | Record<string, { output: string; command: string }>, // Output data for namespaces
   // --- Dependencies can be injected for testing ---
   deps = {
     buildOutputGeneratorContext,
@@ -120,9 +120,9 @@ export const generateOutput = async (
   const outputGeneratorContext = await deps.buildOutputGeneratorContext(
     config,
     namespaceNames,
-    namespaceYamlData,
+    namespaceData,
     resourcesByNamespace,
-    fetchedYamlBlocks,
+    fetchedOutputBlocks,
   );
 
   // Create the specific context needed for Handlebars rendering
@@ -143,11 +143,11 @@ export const generateOutput = async (
 export const buildOutputGeneratorContext = async (
   config: KubeAggregatorConfigMerged,
   namespaceNames: string[],
-  namespaceYamlData: { yaml: string; command: string },
+  namespaceData: { output: string; command: string },
   resourcesByNamespace?: Record<string, Record<string, string[]>> | Record<string, string[]>,
-  yamlData?:
-    | Array<{ namespace: string; command: string; yaml: string }>
-    | Record<string, { yaml: string; command: string }>,
+  outputData?:
+    | Array<{ namespace: string; command: string; output: string }>
+    | Record<string, { output: string; command: string }>,
 ): Promise<OutputGeneratorContext> => {
   // For v1, we don't implement instruction files
   const repositoryInstruction = '';
@@ -163,34 +163,34 @@ export const buildOutputGeneratorContext = async (
   )[] = [
     {
       kind: 'Namespaces',
-      command: namespaceYamlData.command,
-      yaml: namespaceYamlData.yaml,
+      command: namespaceData.command,
+      output: namespaceData.output,
     },
   ];
 
   // Handle FRD-3 style (array of namespace resource blocks)
-  if (Array.isArray(yamlData)) {
+  if (Array.isArray(outputData)) {
     // These are namespace resource blocks from FRD-3
-    for (const block of yamlData) {
-      if (block.yaml) {
+    for (const block of outputData) {
+      if (block.output) {
         // Add these as namespace resource blocks
         resources.push(block);
       }
     }
   }
-  // Handle FRD-2 style (map of namespace to pod yaml data)
-  else if (yamlData && !Array.isArray(yamlData)) {
+  // Handle FRD-2 style (map of namespace to pod output data)
+  else if (outputData && !Array.isArray(outputData)) {
     // Assume this is the old pod data format from FRD-2
     for (const namespace of namespaceNames) {
-      const podYamlData = yamlData[namespace];
+      const podOutputData = outputData[namespace];
 
       // Only add if we have YAML data and it's not empty
-      if (podYamlData?.yaml) {
+      if (podOutputData?.output) {
         resources.push({
           kind: 'Pods',
           namespace,
-          command: podYamlData.command,
-          yaml: podYamlData.yaml,
+          command: podOutputData.command,
+          output: podOutputData.output,
         });
       }
     }
@@ -205,7 +205,7 @@ export const buildOutputGeneratorContext = async (
     resources,
     // Legacy fields for backward compatibility
     resourceKind: 'Namespaces',
-    kubectlCommand: namespaceYamlData.command,
-    resourceYamlOutput: namespaceYamlData.yaml,
+    kubectlCommand: namespaceData.command,
+    resourceOutput: namespaceData.output,
   };
 };

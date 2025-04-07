@@ -8,17 +8,17 @@ export interface ResourceData {
   kind: string; // e.g., "Namespaces", "Pods"
   namespace?: string; // Only present for namespace-scoped resources
   command: string; // The kubectl command used to fetch this resource
-  yaml: string; // The YAML content of the resource
+  output: string; // The output content of the resource
 }
 
 /**
- * Represents a block of YAML resources for a namespace.
+ * Represents a block of resources for a namespace.
  * Used by FRD-3 to represent multiple resource types fetched at once from a namespace.
  */
 export interface NamespaceResourceBlock {
   namespace: string; // The namespace where these resources were fetched from
   command: string; // The kubectl command used to fetch these resources
-  yaml: string; // The YAML content containing multiple resource types
+  output: string; // The output content containing multiple resource types
 }
 
 // Data context for generating the entire output file
@@ -35,8 +35,8 @@ export interface OutputGeneratorContext {
 
   // --- Legacy fields for backward compatibility, will be deprecated ---
   resourceKind?: string; // e.g., "Namespaces"
-  kubectlCommand?: string; // Command used, e.g., "kubectl get namespaces -o yaml"
-  resourceYamlOutput?: string; // The actual YAML output from the command
+  kubectlCommand?: string; // Command used, e.g., "kubectl get namespaces -o json"
+  resourceOutput?: string; // The actual output from the command
 }
 
 // Data context specifically for rendering the Handlebars template
@@ -62,5 +62,5 @@ export interface RenderContext {
   // --- Legacy fields for backward compatibility, will be deprecated ---
   readonly resourceKind?: string;
   readonly kubectlCommand?: string;
-  readonly resourceYamlOutput?: string;
+  readonly resourceOutput?: string;
 }

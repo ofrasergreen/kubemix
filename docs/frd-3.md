@@ -21,16 +21,16 @@ This replaces the previous approach of fetching *only* Pods individually per nam
 2.  The tool first fetches all namespace names (using `getNamespaceNames`).
 3.  The tool then iterates through the discovered namespaces (respecting any configured exclusions).
 4.  For *each* relevant namespace, the tool executes `kubectl get pods,services,deployments,configmaps,secrets -n <namespace> -o name` to get resource names for the tree.
-5.  For *each* relevant namespace, the tool executes `kubectl get pods,services,deployments,configmaps,secrets -n <namespace> -o yaml` to get the combined YAML output.
+5.  For *each* relevant namespace, the tool executes `kubectl get pods,services,deployments,configmaps,secrets -n <namespace> -o wide` to get the combined tabular output.
 6.  The Markdown output file (e.g., `kubemix-output.md`) is generated.
 7.  The "Cluster Resource Overview" section is updated to show namespaces, with discovered pods, services, deployments, configmaps, and secrets listed and indented underneath, grouped by kind (see example below).
 8.  The "Resources" section contains:
     *   The original block for `Resource: Namespaces`.
     *   *One* subsequent block *per namespace* that contains fetched resources, formatted as:
         *   Heading: `## Resources in Namespace: <namespace-name>`
-        *   Command block showing: `kubectl get pods,services,deployments,configmaps,secrets -n <namespace-name> -o yaml`
-        *   YAML code block containing the *full multi-document YAML output* from that command.
-9.  Namespaces without any of the target resource types should still appear in the Resource Overview tree but might not generate a "Resources in Namespace" block (or generate one with empty YAML).
+        *   Command block showing: `kubectl get pods,services,deployments,configmaps,secrets -n <namespace-name> -o wide`
+        *   Code block containing the tabular output from that command.
+9.  Namespaces without any of the target resource types should still appear in the Resource Overview tree but might not generate a "Resources in Namespace" block (or generate one with empty output).
 10. Error handling: Failures fetching resources for one namespace should be logged but should not stop the processing of other namespaces.
 
 **Example Updated Resource Overview Format:**
@@ -131,7 +131,7 @@ my-app-ns
 
 **Key Considerations:**
 
-*   **Multi-Document YAML:** The primary challenge is handling the multi-document YAML string returned by `kubectl get type1,type2,... -o yaml`. For this iteration, the FRD specifies simply outputting this raw block per namespace. Future improvements could involve parsing this YAML (e.g., using the `yaml` library's `parseAllDocuments`) to potentially structure the output further or apply redaction *per resource* within the block.
+*   **Tabular Output Format:** Using `kubectl get type1,type2,... -o wide` returns a tabular output format that is more concise than YAML. For this iteration, the FRD specifies simply outputting this raw block per namespace. Future improvements could involve parsing this output to potentially structure it further or apply redaction *per resource* within the block.
 *   **`-o name` Parsing:** The output `kind/name` needs careful parsing, including handling kinds with dots (like `deployment.apps`). Normalizing these kinds (e.g., `deployment.apps` -> `deployments`) for the tree view might be desirable.
 *   **Resource List:** The list `['pods', 'services', 'deployments', 'configmaps', 'secrets']` is hardcoded for now. This should eventually become configurable.
 *   **Permissions:** The multi-get command (`kubectl get pods,svc,...`) will fail entirely for a namespace if the user lacks `get` permission for *any* of the listed types in that namespace. The error handling in the packager's loop needs to catch this.
@@ -140,8 +140,8 @@ my-app-ns
 
 *   Fetching resource types *not* in the predefined list (pods, services, deployments, configmaps, secrets).
 *   Dynamically discovering resource types using `kubectl api-resources`.
-*   Parsing the multi-document YAML output *before* rendering it in the final file.
+*   Parsing the tabular output *before* rendering it in the final file.
 *   Implementing advanced filtering (labels, fields) within the multi-type fetch.
-*   Redaction of sensitive data within the fetched YAML.
+*   Redaction of sensitive data within the fetched output.
 *   Updating XML or Plain Text output formats (focus on Markdown first).
 *   Making the list of resource types configurable.
