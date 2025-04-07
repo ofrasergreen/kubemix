@@ -234,6 +234,7 @@ interface CliInputOptions {
   excludeNamespace?: string;
   includeType?: string;
   excludeType?: string;
+  noRedactSecrets?: boolean;
   config?: string;
   [key: string]: unknown; // Allow other properties we might not handle explicitly
 }
@@ -321,6 +322,17 @@ export const buildCliConfig = (options: CliInputOptions): KubeAggregatorConfigCl
     if (excludeResourceTypes.length) {
       cliConfig.filter = { ...cliConfig.filter, excludeResourceTypes };
       logger.debug(`Excluding resource types from CLI: ${excludeResourceTypes.join(', ')}`);
+    }
+  }
+
+  // Handle security options
+  if (options.noRedactSecrets !== undefined) {
+    cliConfig.security = {
+      ...cliConfig.security,
+      redactSecrets: !options.noRedactSecrets, // Invert the "no" flag
+    };
+    if (options.noRedactSecrets) {
+      logger.warn('⚠️  Secret redaction disabled. Secret data will be included in the output!');
     }
   }
 

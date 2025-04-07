@@ -10,6 +10,7 @@
 * **kubectl Powered:** Uses standard `kubectl` commands under the hood, ensuring compatibility and familiarity. The commands used are included in the output for transparency and AI understanding.
 * **AI-Friendly Output:** Generates output (initially Markdown) structured for easy parsing by LLMs.
 * **Configurable:** Options to filter by namespace, resource type, labels, etc.
+* **Security:** Automatically redacts sensitive data in Secret resources to prevent accidental exposure.
 * **Extensible:** Built with a modular structure in TypeScript.
 
 ## 🤔 Why KubeMix?
@@ -98,6 +99,14 @@ Specify kubeconfig or context:
 
 ```bash
 kubemix --kubeconfig /path/to/config --context my-cluster-context
+```
+
+Control security features:
+
+```bash
+# Disable Secret redaction (NOT RECOMMENDED for security reasons)
+# By default, Secret data is redacted with ***** placeholders
+kubemix --no-redact-secrets
 ```
 
 ## 📄 Output Format (Initial - Markdown)

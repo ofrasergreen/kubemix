@@ -41,6 +41,14 @@ export const printSummary = (
   logger.log(`${pc.white('   Output Format:')} ${pc.white(config.kubernetes?.outputFormat || 'text')}`);
   logger.log(`${pc.white('    Output Style:')} ${pc.white(config.output?.style || 'markdown')}`);
 
+  // Show security information
+  const redactSecretsEnabled = config.security?.redactSecrets !== false;
+  logger.log(
+    `${pc.white(' Secret Redaction:')} ${
+      redactSecretsEnabled ? pc.green('Enabled') : pc.red('Disabled (NOT RECOMMENDED)')
+    }`,
+  );
+
   // Show filtering information if applicable
   if (config.filter) {
     if (config.filter.namespaces?.length) {

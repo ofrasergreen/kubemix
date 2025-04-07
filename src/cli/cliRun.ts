@@ -25,6 +25,7 @@ export const run = async () => {
       .option('--exclude-namespace <ns1,ns2,...>', 'Specify namespaces to exclude (comma-separated)')
       .option('--include-type <type1,type2,...>', 'Specify resource types to include (comma-separated)')
       .option('--exclude-type <type1,type2,...>', 'Specify resource types to exclude (comma-separated)')
+      .option('--no-redact-secrets', 'Disable redaction of Secret data (NOT RECOMMENDED)')
       .option('-c, --config <path>', 'Path to a custom config file')
       .addOption(new Option('--verbose', 'Enable verbose logging').conflicts('quiet'))
       .addOption(new Option('--quiet', 'Disable informational output').conflicts('verbose'))

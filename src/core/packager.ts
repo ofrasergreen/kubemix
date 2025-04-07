@@ -11,6 +11,7 @@ import * as outputGenerator from './output/outputGenerate.js';
 import * as clipboardCopier from './packager/copyToClipboardIfEnabled.js'; // Assuming adapted version
 // import * as metricsCalculator from './metrics/calculateMetrics.js'; // Keep commented for now
 import * as outputWriter from './packager/writeOutputToDisk.js'; // Assuming adapted version
+import { processJsonResourceManifest, processResourceManifest } from './processing/resourceProcessor.js';
 
 // Use 'all' to fetch all common resource types at once
 const resourceTypeAll = 'all';
@@ -67,6 +68,48 @@ export const aggregateResources = async (
 
     // Fetch the namespace output in the specified format
     namespaceData = await deps.getNamespacesOutput(kubeconfigPath, context, outputFormat);
+
+    // Process the namespace output to redact any secrets if needed
+    if (namespaceData.output) {
+      if (config.security?.redactSecrets) {
+        // Determine actual output format from command rather than config setting
+        let actualFormat = outputFormat;
+
+        // Check the command for the actual format used - more comprehensive checks
+        const cmdStr = namespaceData.command.toLowerCase();
+        if (cmdStr.includes(' -o yaml') || cmdStr.includes(' --output=yaml') || cmdStr.includes(' --output yaml')) {
+          actualFormat = 'yaml';
+        } else if (cmdStr.includes(' -o json') || cmdStr.includes(' --output=json') || cmdStr.includes(' --output json')) {
+          actualFormat = 'json';
+        }
+        
+        // Debug logging to help diagnose format issues
+        logger.debug(`Command used: "${namespaceData.command}"`);
+        logger.debug(`Output format from config: ${outputFormat}, detected format: ${actualFormat}`);
+        logger.debug(`Output size before processing: ${namespaceData.output.length} chars`);
+        
+        // Extra verification check for YAML content
+        if (namespaceData.output.trim().startsWith('apiVersion:') || namespaceData.output.includes('\napiVersion:')) {
+          logger.debug('Output appears to be YAML based on content inspection');
+          if (actualFormat !== 'yaml') {
+            logger.warn('Content appears to be YAML but format detection says otherwise, forcing YAML processing');
+            actualFormat = 'yaml';
+          }
+        }
+
+        if (actualFormat === 'yaml') {
+          logger.debug('Redacting secrets in YAML output for namespaces...');
+          namespaceData.output = processResourceManifest(namespaceData.output, config);
+        } else if (actualFormat === 'json') {
+          logger.debug('Redacting secrets in JSON output for namespaces...');
+          namespaceData.output = processJsonResourceManifest(namespaceData.output, config);
+        } else {
+          logger.debug(`No redaction available for '${actualFormat}' format (text format redaction not supported)`);
+        }
+      } else {
+        logger.debug('Secret redaction disabled in config, skipping redaction for namespaces');
+      }
+    }
   } catch (error) {
     logger.error('Failed to fetch Kubernetes namespace data.', error);
     // Propagate the error (it should already be an AppError from kubectlWrapper)
@@ -124,10 +167,56 @@ export const aggregateResources = async (
 
           // Only add if we got valid output data back
           if (resourceData.output) {
+            // Process the output to redact secrets if needed based on the format
+            let processedOutput = resourceData.output;
+
+            if (config.security?.redactSecrets) {
+              // Determine actual output format from command rather than config setting
+              let actualFormat = outputFormat;
+
+              // Check the command for the actual format used - more comprehensive checks
+              const cmdStr = resourceData.command.toLowerCase();
+              if (cmdStr.includes(' -o yaml') || cmdStr.includes(' --output=yaml') || cmdStr.includes(' --output yaml')) {
+                actualFormat = 'yaml';
+              } else if (cmdStr.includes(' -o json') || cmdStr.includes(' --output=json') || cmdStr.includes(' --output json')) {
+                actualFormat = 'json';
+              }
+              
+              // Debug logging to help diagnose format issues
+              logger.debug(`Command used: "${resourceData.command}"`);
+              logger.debug(`Output format from config: ${outputFormat}, detected format: ${actualFormat}`);
+              logger.debug(`Output size before processing: ${resourceData.output.length} chars`);
+              
+              // Extra verification check for YAML content
+              if (resourceData.output.trim().startsWith('apiVersion:') || resourceData.output.includes('\napiVersion:')) {
+                logger.debug('Output appears to be YAML based on content inspection');
+                if (actualFormat !== 'yaml') {
+                  logger.warn('Content appears to be YAML but format detection says otherwise, forcing YAML processing');
+                  actualFormat = 'yaml';
+                }
+              }
+
+              // We already have this debug log higher up
+
+              if (actualFormat === 'yaml') {
+                logger.debug(`Redacting secrets in YAML output for namespace '${namespace}'...`);
+                processedOutput = processResourceManifest(processedOutput, config);
+              } else if (actualFormat === 'json') {
+                logger.debug(`Redacting secrets in JSON output for namespace '${namespace}'...`);
+                processedOutput = processJsonResourceManifest(processedOutput, config);
+              } else {
+                logger.debug(
+                  `No redaction available for '${actualFormat}' format (text format redaction not supported)`,
+                );
+              }
+            } else {
+              logger.debug('Secret redaction disabled in config, skipping redaction');
+            }
+
             fetchedOutputBlocks.push({
               namespace,
               command: resourceData.command,
-              output: resourceData.output,
+              output: processedOutput,
             });
           }
         } else {

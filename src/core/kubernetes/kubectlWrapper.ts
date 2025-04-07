@@ -138,6 +138,10 @@ export const getNamespacesOutput = async (
 
   // Map the outputFormat to kubectl output flag
   const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
+  
+  // Debug output flag explicitly 
+  logger.debug(`Using kubectl output flag: -o ${outputFlag} for namespace list format '${outputFormat}'`);
+  
   const args = ['get', 'namespaces', '-o', outputFlag];
 
   try {
@@ -301,6 +305,10 @@ export const getResourcesOutput = async (
   // Build the kubectl command with comma-separated types
   const typeList = types.join(',');
   const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
+  
+  // Debug output flag explicitly 
+  logger.debug(`Using kubectl output flag: -o ${outputFlag} for format '${outputFormat}'`);
+  
   const args = ['get', typeList, '-n', namespace, '-o', outputFlag];
 
   try {

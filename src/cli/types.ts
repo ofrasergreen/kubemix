@@ -17,6 +17,9 @@ export interface CliOptions extends OptionValues {
   includeType?: string; // Resource types to include, comma-separated
   excludeType?: string; // Resource types to exclude, comma-separated
 
+  // Security Options
+  noRedactSecrets?: boolean; // Disable redaction of Secret data
+
   // Configuration Options
   config?: string; // Path to a custom config file
   // init?: boolean; // Add later if needed
