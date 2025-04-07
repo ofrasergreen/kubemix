@@ -58,6 +58,7 @@
     "commander": "^13.1.0",
     "handlebars": "^4.7.8",
     "picocolors": "^1.0.0",
+    "secretlint": "^9.3.0",
     "yaml": "^2.7.1",
     "zod": "^3.24.2"
   }

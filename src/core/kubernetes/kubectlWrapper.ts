@@ -181,10 +181,10 @@ export const getResourcesByName = async (
 
   // Create empty result structure with empty arrays for each resource type
   const result: Record<string, string[]> = {};
-  types.forEach((type) => {
+  for (const type of types) {
     // Store with normalized kind name
     result[type] = [];
-  });
+  }
 
   // If no types specified, return empty result
   if (!types.length) {

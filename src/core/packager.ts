@@ -6,6 +6,7 @@ import type { KubeAggregatorConfigMerged } from '../config/configSchema.js'; // 
 
 // --- Adapted Kubernetes Core Modules ---
 import * as kubectlWrapper from './kubernetes/kubectlWrapper.js';
+import * as resourceFilter from './kubernetes/resourceFilter.js';
 import * as outputGenerator from './output/outputGenerate.js';
 import * as clipboardCopier from './packager/copyToClipboardIfEnabled.js'; // Assuming adapted version
 // import * as metricsCalculator from './metrics/calculateMetrics.js'; // Keep commented for now
@@ -56,9 +57,13 @@ export const aggregateResources = async (
   const outputFormat = config.kubernetes?.outputFormat || 'text';
 
   try {
-    // Fetch names first for the tree structure
-    namespaceNames = await deps.getNamespaceNames(kubeconfigPath, context);
-    logger.info(`Found ${namespaceNames.length} namespaces.`);
+    // Fetch all namespace names first
+    const allNamespaceNames = await deps.getNamespaceNames(kubeconfigPath, context);
+    logger.info(`Found ${allNamespaceNames.length} namespaces in total.`);
+
+    // Apply namespace filtering
+    namespaceNames = resourceFilter.getNamespacesToQuery(config, allNamespaceNames);
+    logger.info(`Selected ${namespaceNames.length} namespaces after filtering.`);
 
     // Fetch the namespace output in the specified format
     namespaceData = await deps.getNamespacesOutput(kubeconfigPath, context, outputFormat);
@@ -79,12 +84,18 @@ export const aggregateResources = async (
   // Track resource counts by type - will be populated based on what we find
   const totalResourceCounts: Record<string, number> = {};
 
+  // Get the resource types to fetch based on configuration
+  const resourceTypes = resourceFilter.getResourceTypesToFetch(config);
+  logger.info(`Will fetch the following resource types: ${resourceTypes.join(', ')}`);
+
   // Use Promise.all to fetch resource data for all namespaces concurrently for better performance
   await Promise.all(
     namespaceNames.map(async (namespace) => {
       try {
-        // Get resource names by kind for the namespace using 'all'
-        const resourcesByKind = await deps.getResourcesByName(namespace, [resourceTypeAll], kubeconfigPath, context);
+        // Get resource names by kind for the namespace using filtered resource types
+        // Use resourceTypeAll for discovery if the types include "all", otherwise use specific types
+        const typesToFetch = resourceTypes.includes('all') ? [resourceTypeAll] : resourceTypes;
+        const resourcesByKind = await deps.getResourcesByName(namespace, typesToFetch, kubeconfigPath, context);
 
         // Store for the tree view
         resourcesByNamespace[namespace] = resourcesByKind;
@@ -98,14 +109,14 @@ export const aggregateResources = async (
           totalResourceCounts[kind] += resources.length;
         }
 
-        // Get combined YAML for all resource types in this namespace
+        // Get combined output for the filtered resource types in this namespace
         const hasAnyResources = Object.values(resourcesByKind).some((resources) => resources.length > 0);
 
         if (hasAnyResources) {
-          logger.debug(`Fetching ${outputFormat} output for all resources in namespace '${namespace}'...`);
+          logger.debug(`Fetching ${outputFormat} output for filtered resources in namespace '${namespace}'...`);
           const resourceData = await deps.getResourcesOutput(
             namespace,
-            [resourceTypeAll],
+            typesToFetch,
             kubeconfigPath,
             context,
             outputFormat,

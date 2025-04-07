@@ -11,6 +11,12 @@ export interface CliOptions extends OptionValues {
   context?: string; // Kubernetes context to use
   format?: string; // Output format for kubectl commands (text, yaml, json)
 
+  // Filtering Options
+  namespace?: string; // Namespaces to include, comma-separated
+  excludeNamespace?: string; // Namespaces to exclude, comma-separated
+  includeType?: string; // Resource types to include, comma-separated
+  excludeType?: string; // Resource types to exclude, comma-separated
+
   // Configuration Options
   config?: string; // Path to a custom config file
   // init?: boolean; // Add later if needed

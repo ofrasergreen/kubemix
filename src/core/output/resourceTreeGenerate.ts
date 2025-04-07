@@ -29,20 +29,21 @@ export const generateResourceTreeString = (
   const isLegacyFormat =
     Object.keys(resourcesByNamespace).length > 0 && Array.isArray(Object.values(resourcesByNamespace)[0]);
 
+  // Create a properly typed variable for the current format
+  let typedResourcesByNamespace: Record<string, Record<string, string[]>>;
+
   if (isLegacyFormat) {
     // Convert legacy format to new format (assuming it's all pods)
     const podsByNamespace = resourcesByNamespace as Record<string, string[]>;
-    const newFormat: Record<string, Record<string, string[]>> = {};
+    typedResourcesByNamespace = {};
 
     for (const [namespace, pods] of Object.entries(podsByNamespace)) {
-      newFormat[namespace] = { pods };
+      typedResourcesByNamespace[namespace] = { pods };
     }
-
-    resourcesByNamespace = newFormat;
+  } else {
+    // It's already in the new format
+    typedResourcesByNamespace = resourcesByNamespace as Record<string, Record<string, string[]>>;
   }
-
-  // Now resourcesByNamespace is in the new format
-  const typedResourcesByNamespace = resourcesByNamespace as Record<string, Record<string, string[]>>;
 
   // Build the hierarchical tree with resources under namespaces
   const treeLines: string[] = [];

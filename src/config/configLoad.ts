@@ -15,6 +15,8 @@ import {
   type KubeAggregatorConfigCli,
   type KubeAggregatorConfigFile,
   type KubeAggregatorConfigMerged,
+  type KubeAggregatorOutputStyle,
+  type KubectlOutputFormat,
   defaultConfig,
   defaultFilePathMap,
   kubeAggregatorConfigFileSchema,
@@ -142,8 +144,55 @@ export const mergeConfigs = (
 
   // Merge file config
   merged = deepMerge(merged, fileConfig);
-  // Merge CLI config (CLI overrides file and defaults)
-  merged = deepMerge(merged, cliConfig);
+
+  // Special handling for filter arrays before applying standard CLI merge
+
+  // Create a copy of the current state of the filter configuration after merging defaults and file config
+  const currentFilter = merged.filter ? { ...merged.filter } : {};
+
+  // Handle special cases for filter arrays
+  if (cliConfig.filter) {
+    // 1. Namespaces: CLI namespaces REPLACE file/default namespaces
+    if (cliConfig.filter.namespaces?.length) {
+      currentFilter.namespaces = [...cliConfig.filter.namespaces];
+      logger.debug(`Using CLI-specified namespaces: ${currentFilter.namespaces.join(', ')}`);
+    }
+
+    // 2. Resource types: CLI includeResourceTypes REPLACE file/default includeResourceTypes
+    if (cliConfig.filter.includeResourceTypes?.length) {
+      currentFilter.includeResourceTypes = [...cliConfig.filter.includeResourceTypes];
+      logger.debug(`Using CLI-specified resource types: ${currentFilter.includeResourceTypes.join(', ')}`);
+    }
+
+    // 3. Exclude namespaces: CLI excludeNamespaces ADD TO file/default excludeNamespaces
+    if (cliConfig.filter.excludeNamespaces?.length) {
+      const excludeSet = new Set<string>([
+        ...(currentFilter.excludeNamespaces || []),
+        ...cliConfig.filter.excludeNamespaces,
+      ]);
+      currentFilter.excludeNamespaces = Array.from(excludeSet);
+      logger.debug(`Combined excluded namespaces: ${currentFilter.excludeNamespaces.join(', ')}`);
+    }
+
+    // 4. Exclude resource types: CLI excludeResourceTypes ADD TO file/default excludeResourceTypes
+    if (cliConfig.filter.excludeResourceTypes?.length) {
+      const excludeSet = new Set<string>([
+        ...(currentFilter.excludeResourceTypes || []),
+        ...cliConfig.filter.excludeResourceTypes,
+      ]);
+      currentFilter.excludeResourceTypes = Array.from(excludeSet);
+      logger.debug(`Combined excluded resource types: ${currentFilter.excludeResourceTypes.join(', ')}`);
+    }
+
+    // Update merged filter with our specially handled arrays
+    merged.filter = currentFilter;
+  }
+
+  // Now perform standard merge for other CLI options
+  // We have to remove filter from cliConfig since we've handled it specially
+  const filteredCliConfig = { ...cliConfig };
+  filteredCliConfig.filter = undefined;
+  merged = deepMerge(merged, filteredCliConfig);
 
   // Special handling for filePath based on style if not explicitly set
   if (!merged.output?.filePath) {
@@ -174,13 +223,28 @@ type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends (infer U)[] ? DeepPartial<U>[] : T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
+// CLI options type for the buildCliConfig and loadMergedConfig functions
+interface CliInputOptions {
+  output?: string;
+  style?: string;
+  kubeconfig?: string;
+  context?: string;
+  format?: string;
+  namespace?: string;
+  excludeNamespace?: string;
+  includeType?: string;
+  excludeType?: string;
+  config?: string;
+  [key: string]: unknown; // Allow other properties we might not handle explicitly
+}
+
 /**
  * Builds a partial configuration object from CLI options.
  *
  * @param options - CLI options from command line parser
  * @returns A partial config object with CLI-specific settings
  */
-export const buildCliConfig = (options: any): KubeAggregatorConfigCli => {
+export const buildCliConfig = (options: CliInputOptions): KubeAggregatorConfigCli => {
   const cliConfig: KubeAggregatorConfigCli = {};
 
   // Map CLI options to config structure
@@ -191,7 +255,7 @@ export const buildCliConfig = (options: any): KubeAggregatorConfigCli => {
     // Basic validation, schema will do more thorough check
     const validStyles = ['markdown', 'xml', 'plain'];
     if (validStyles.includes(options.style.toLowerCase())) {
-      cliConfig.output = { ...cliConfig.output, style: options.style.toLowerCase() as any };
+      cliConfig.output = { ...cliConfig.output, style: options.style.toLowerCase() as KubeAggregatorOutputStyle };
     } else {
       logger.warn(`Invalid style specified: ${options.style}. Defaulting to markdown.`);
     }
@@ -206,13 +270,59 @@ export const buildCliConfig = (options: any): KubeAggregatorConfigCli => {
     // Basic validation, schema will do more thorough check
     const validFormats = ['text', 'yaml', 'json'];
     if (validFormats.includes(options.format.toLowerCase())) {
-      cliConfig.kubernetes = { ...cliConfig.kubernetes, outputFormat: options.format.toLowerCase() as any };
+      cliConfig.kubernetes = {
+        ...cliConfig.kubernetes,
+        outputFormat: options.format.toLowerCase() as KubectlOutputFormat,
+      };
     } else {
       logger.warn(`Invalid kubectl output format specified: ${options.format}. Defaulting to text.`);
     }
   }
 
-  // Add other option mappings here as needed
+  // Handle namespace and resource type filtering options
+  if (options.namespace) {
+    const namespaces = options.namespace
+      .split(',')
+      .map((ns: string) => ns.trim())
+      .filter(Boolean);
+    if (namespaces.length) {
+      cliConfig.filter = { ...cliConfig.filter, namespaces };
+      logger.debug(`Including namespaces from CLI: ${namespaces.join(', ')}`);
+    }
+  }
+
+  if (options.excludeNamespace) {
+    const excludeNamespaces = options.excludeNamespace
+      .split(',')
+      .map((ns: string) => ns.trim())
+      .filter(Boolean);
+    if (excludeNamespaces.length) {
+      cliConfig.filter = { ...cliConfig.filter, excludeNamespaces };
+      logger.debug(`Excluding namespaces from CLI: ${excludeNamespaces.join(', ')}`);
+    }
+  }
+
+  if (options.includeType) {
+    const includeResourceTypes = options.includeType
+      .split(',')
+      .map((type: string) => type.trim())
+      .filter(Boolean);
+    if (includeResourceTypes.length) {
+      cliConfig.filter = { ...cliConfig.filter, includeResourceTypes };
+      logger.debug(`Including resource types from CLI: ${includeResourceTypes.join(', ')}`);
+    }
+  }
+
+  if (options.excludeType) {
+    const excludeResourceTypes = options.excludeType
+      .split(',')
+      .map((type: string) => type.trim())
+      .filter(Boolean);
+    if (excludeResourceTypes.length) {
+      cliConfig.filter = { ...cliConfig.filter, excludeResourceTypes };
+      logger.debug(`Excluding resource types from CLI: ${excludeResourceTypes.join(', ')}`);
+    }
+  }
 
   // Validate the generated CLI config portion against its schema
   try {
@@ -230,7 +340,7 @@ export const buildCliConfig = (options: any): KubeAggregatorConfigCli => {
  * @param options - CLI options from the command line parser
  * @returns The fully merged and validated configuration
  */
-export const loadMergedConfig = async (options: any): Promise<KubeAggregatorConfigMerged> => {
+export const loadMergedConfig = async (options: CliInputOptions): Promise<KubeAggregatorConfigMerged> => {
   const cwd = process.cwd();
   const fileConfig = await loadConfig(cwd, options.config ?? null);
   const cliConfig = buildCliConfig(options);

@@ -75,6 +75,25 @@ kubemix --format yaml  # kubectl -o yaml
 kubemix --format json  # kubectl -o json
 ```
 
+Filter by namespaces and resource types:
+
+```bash
+# Include only specific namespaces
+kubemix -n namespace1,namespace2
+
+# Exclude specific namespaces
+kubemix --exclude-namespace kube-system,kube-public
+
+# Include only specific resource types
+kubemix --include-type pods,deployments,services
+
+# Exclude specific resource types
+kubemix --exclude-type events,endpoints
+
+# Combine filters
+kubemix -n namespace1 --include-type pods,deployments
+```
+
 Specify kubeconfig or context:
 
 ```bash

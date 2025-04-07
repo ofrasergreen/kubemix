@@ -41,6 +41,22 @@ export const printSummary = (
   logger.log(`${pc.white('   Output Format:')} ${pc.white(config.kubernetes?.outputFormat || 'text')}`);
   logger.log(`${pc.white('    Output Style:')} ${pc.white(config.output?.style || 'markdown')}`);
 
+  // Show filtering information if applicable
+  if (config.filter) {
+    if (config.filter.namespaces?.length) {
+      logger.log(`${pc.white('Included Namespaces:')} ${pc.white(config.filter.namespaces.join(', '))}`);
+    }
+    if (config.filter.excludeNamespaces?.length) {
+      logger.log(`${pc.white('Excluded Namespaces:')} ${pc.white(config.filter.excludeNamespaces.join(', '))}`);
+    }
+    if (config.filter.includeResourceTypes?.length) {
+      logger.log(`${pc.white('Included Resource Types:')} ${pc.white(config.filter.includeResourceTypes.join(', '))}`);
+    }
+    if (config.filter.excludeResourceTypes?.length) {
+      logger.log(`${pc.white('Excluded Resource Types:')} ${pc.white(config.filter.excludeResourceTypes.join(', '))}`);
+    }
+  }
+
   // Add security check summary later if implemented
   // logger.log(`${pc.white('       Security:')} ${pc.white(securityCheckMessage)}`);
 };
