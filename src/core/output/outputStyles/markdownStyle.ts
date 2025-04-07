@@ -18,6 +18,12 @@ export const getMarkdownTemplate = () => {
   a. A header indicating the resource type (e.g., ## Resource: Namespaces)
   b. The exact kubectl command used to fetch the resource.
   c. The full output of the command in a code block.
+{{#if diagnosticsEnabled}}
+5. Diagnostics section for failing pods (if any were found), including:
+  a. Detailed description output with status and events.
+  b. Container logs for troubleshooting.
+  c. Previous container logs if available (for crash investigation).
+{{/if}}
 
 ## Usage Guidelines
 {{{summaryUsageGuidelines}}}
@@ -64,6 +70,57 @@ export const getMarkdownTemplate = () => {
 \`\`\`
 
 {{/each}}
+
+{{!-- Diagnostics Section for Failing Pods --}}
+{{#if diagnosticsEnabled}}
+{{#if podDiagnostics}}
+# Diagnostics for Failing Resources
+{{else}}
+{{!-- No failing pods found, but diagnostics is enabled --}}
+{{/if}}
+{{#if podDiagnostics}}
+
+{{#each podDiagnostics}}
+---
+
+### Pod: {{this.namespace}}/{{this.podName}}
+
+{{#if this.error}}
+**Note:** Error occurred during diagnostics: {{this.error}}
+{{/if}}
+
+**Describe Output:**
+\`\`\`bash
+# Command used:
+{{{this.describeCommand}}}
+\`\`\`
+\`\`\`
+{{{this.description}}}
+\`\`\`
+
+**Current Logs:**
+\`\`\`bash
+# Command used:
+{{{this.logsCommand}}}
+\`\`\`
+\`\`\`
+{{{this.logs}}}
+\`\`\`
+
+{{#if this.prevLogs}}
+**Previous Logs:**
+\`\`\`bash
+# Command used:
+{{{this.prevLogsCommand}}}
+\`\`\`
+\`\`\`
+{{{this.prevLogs}}}
+\`\`\`
+{{/if}}
+
+{{/each}}
+{{/if}}
+{{/if}}
 
 {{#if instruction}}
 # Instruction

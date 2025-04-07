@@ -235,6 +235,8 @@ interface CliInputOptions {
   includeType?: string;
   excludeType?: string;
   noRedactSecrets?: boolean;
+  noDiagnostics?: boolean;
+  podLogLines?: number | string;
   config?: string;
   [key: string]: unknown; // Allow other properties we might not handle explicitly
 }
@@ -333,6 +335,30 @@ export const buildCliConfig = (options: CliInputOptions): KubeAggregatorConfigCl
     };
     if (options.noRedactSecrets) {
       logger.warn('⚠️  Secret redaction disabled. Secret data will be included in the output!');
+    }
+  }
+
+  // Handle diagnostics options
+  if (options.noDiagnostics !== undefined || options.podLogLines !== undefined) {
+    cliConfig.diagnostics = {
+      ...cliConfig.diagnostics,
+    };
+
+    if (options.noDiagnostics !== undefined) {
+      cliConfig.diagnostics.includeFailingPods = !options.noDiagnostics; // Invert the "no" flag
+      if (options.noDiagnostics) {
+        logger.debug('Diagnostics for failing pods disabled via CLI option');
+      }
+    }
+
+    if (options.podLogLines !== undefined) {
+      const logLines = Number.parseInt(options.podLogLines.toString(), 10);
+      if (!Number.isNaN(logLines) && logLines > 0) {
+        cliConfig.diagnostics.podLogTailLines = logLines;
+        logger.debug(`Setting pod log tail lines to ${logLines} via CLI option`);
+      } else {
+        logger.warn(`Invalid pod log lines value: ${options.podLogLines}. Using default.`);
+      }
     }
   }
 

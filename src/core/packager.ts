@@ -1,5 +1,6 @@
 // src/core/packager.ts
 
+import * as yaml from 'yaml';
 import type { AggregationResult } from '../cli/actions/namespaceAction.js'; // Use the result type defined in the action
 // --- Adapted Kubernetes Config/Types ---
 import type { KubeAggregatorConfigMerged } from '../config/configSchema.js'; // Renamed
@@ -8,6 +9,7 @@ import type { KubeAggregatorConfigMerged } from '../config/configSchema.js'; // 
 import * as kubectlWrapper from './kubernetes/kubectlWrapper.js';
 import * as resourceFilter from './kubernetes/resourceFilter.js';
 import * as outputGenerator from './output/outputGenerate.js';
+import type { PodDiagnostics } from './output/outputGeneratorTypes.js';
 import * as clipboardCopier from './packager/copyToClipboardIfEnabled.js'; // Assuming adapted version
 // import * as metricsCalculator from './metrics/calculateMetrics.js'; // Keep commented for now
 import * as outputWriter from './packager/writeOutputToDisk.js'; // Assuming adapted version
@@ -19,6 +21,7 @@ const resourceTypeAll = 'all';
 // --- Shared Modules ---
 import { logger } from '../shared/logger.js';
 import type { ProgressCallback } from '../shared/types.js';
+import { isPodFailing } from './kubernetes/resourceFilter.js';
 
 /**
  * Orchestrates the process of aggregating Kubernetes resources.
@@ -39,6 +42,8 @@ export const aggregateResources = async (
     getNamespacesOutput: kubectlWrapper.getNamespacesOutput,
     getResourcesByName: kubectlWrapper.getResourcesByName,
     getResourcesOutput: kubectlWrapper.getResourcesOutput,
+    describePod: kubectlWrapper.describePod,
+    getPodLogs: kubectlWrapper.getPodLogs,
     generateOutput: outputGenerator.generateOutput,
     writeOutputToDisk: outputWriter.writeOutputToDisk,
     copyToClipboardIfEnabled: clipboardCopier.copyToClipboardIfEnabled,
@@ -79,15 +84,19 @@ export const aggregateResources = async (
         const cmdStr = namespaceData.command.toLowerCase();
         if (cmdStr.includes(' -o yaml') || cmdStr.includes(' --output=yaml') || cmdStr.includes(' --output yaml')) {
           actualFormat = 'yaml';
-        } else if (cmdStr.includes(' -o json') || cmdStr.includes(' --output=json') || cmdStr.includes(' --output json')) {
+        } else if (
+          cmdStr.includes(' -o json') ||
+          cmdStr.includes(' --output=json') ||
+          cmdStr.includes(' --output json')
+        ) {
           actualFormat = 'json';
         }
-        
+
         // Debug logging to help diagnose format issues
         logger.debug(`Command used: "${namespaceData.command}"`);
         logger.debug(`Output format from config: ${outputFormat}, detected format: ${actualFormat}`);
         logger.debug(`Output size before processing: ${namespaceData.output.length} chars`);
-        
+
         // Extra verification check for YAML content
         if (namespaceData.output.trim().startsWith('apiVersion:') || namespaceData.output.includes('\napiVersion:')) {
           logger.debug('Output appears to be YAML based on content inspection');
@@ -176,22 +185,35 @@ export const aggregateResources = async (
 
               // Check the command for the actual format used - more comprehensive checks
               const cmdStr = resourceData.command.toLowerCase();
-              if (cmdStr.includes(' -o yaml') || cmdStr.includes(' --output=yaml') || cmdStr.includes(' --output yaml')) {
+              if (
+                cmdStr.includes(' -o yaml') ||
+                cmdStr.includes(' --output=yaml') ||
+                cmdStr.includes(' --output yaml')
+              ) {
                 actualFormat = 'yaml';
-              } else if (cmdStr.includes(' -o json') || cmdStr.includes(' --output=json') || cmdStr.includes(' --output json')) {
+              } else if (
+                cmdStr.includes(' -o json') ||
+                cmdStr.includes(' --output=json') ||
+                cmdStr.includes(' --output json')
+              ) {
                 actualFormat = 'json';
               }
-              
+
               // Debug logging to help diagnose format issues
               logger.debug(`Command used: "${resourceData.command}"`);
               logger.debug(`Output format from config: ${outputFormat}, detected format: ${actualFormat}`);
               logger.debug(`Output size before processing: ${resourceData.output.length} chars`);
-              
+
               // Extra verification check for YAML content
-              if (resourceData.output.trim().startsWith('apiVersion:') || resourceData.output.includes('\napiVersion:')) {
+              if (
+                resourceData.output.trim().startsWith('apiVersion:') ||
+                resourceData.output.includes('\napiVersion:')
+              ) {
                 logger.debug('Output appears to be YAML based on content inspection');
                 if (actualFormat !== 'yaml') {
-                  logger.warn('Content appears to be YAML but format detection says otherwise, forcing YAML processing');
+                  logger.warn(
+                    'Content appears to be YAML but format detection says otherwise, forcing YAML processing',
+                  );
                   actualFormat = 'yaml';
                 }
               }
@@ -239,7 +261,160 @@ export const aggregateResources = async (
 
   logger.info(`Completed resource data fetch. Found ${resourceSummary} across ${namespaceNames.length} namespaces.`);
 
-  // --- 3. Generate Output String ---
+  // --- 3. Find Failing Pods & Gather Diagnostics (FRD-6) ---
+  const podDiagnostics: PodDiagnostics[] = [];
+
+  // Only do this if diagnostics are enabled in the config
+  if (config.diagnostics?.includeFailingPods !== false) {
+    progressCallback('Checking for failing pods and gathering diagnostics...');
+    logger.info('Identifying failing pods for diagnostics...');
+
+    // Look through all fetched output blocks to find pod manifests
+    // For each namespace with resource data, try to parse the output to find pods
+    for (const resourceBlock of fetchedOutputBlocks) {
+      const namespace = resourceBlock.namespace;
+      const output = resourceBlock.output;
+
+      // Skip if the output is empty
+      if (!output) continue;
+
+      // Skip if the output doesn't appear to be a format we can parse
+      // First, check the output format based on the command
+      let outputFormat: 'yaml' | 'json' | 'text' = 'text';
+
+      if (resourceBlock.command.includes(' -o yaml') || resourceBlock.command.includes(' --output=yaml')) {
+        outputFormat = 'yaml';
+      } else if (resourceBlock.command.includes(' -o json') || resourceBlock.command.includes(' --output=json')) {
+        outputFormat = 'json';
+      } else {
+        // Skip formats we can't reliably parse
+        logger.debug(
+          `Skipping diagnostic check for '${namespace}' due to unprocessable output format: ${outputFormat}`,
+        );
+        continue;
+      }
+
+      // Now try to parse the output to find failing pods
+      try {
+        let resources: any[] = [];
+
+        if (outputFormat === 'yaml') {
+          // Parse as YAML
+          const documents = yaml.parseAllDocuments(output);
+          resources = documents.map((doc: any) => doc.toJSON()).filter(Boolean);
+        } else if (outputFormat === 'json') {
+          // Parse as JSON
+          const parsed = JSON.parse(output);
+          // Handle both single resources and lists
+          if (parsed.items && Array.isArray(parsed.items)) {
+            resources = parsed.items;
+          } else if (parsed.kind) {
+            resources = [parsed];
+          }
+        }
+
+        // Function to recursively find failing pods
+        const findFailingPods = (resource: any, ns: string): Array<{ namespace: string; podName: string }> => {
+          const result: Array<{ namespace: string; podName: string }> = [];
+
+          // Check if this is a Pod
+          if (resource.kind === 'Pod') {
+            // Use resource namespace if available, otherwise use parent namespace
+            const podNamespace = resource.metadata?.namespace || ns;
+
+            // Check if this pod is failing
+            if (isPodFailing(resource)) {
+              const podName = resource.metadata?.name;
+              if (podName) {
+                logger.info(`Found failing pod: ${podNamespace}/${podName}, scheduling diagnostics`);
+                result.push({ namespace: podNamespace, podName });
+              }
+            }
+          }
+          // Check if this is a List that might contain pods
+          else if (resource.kind?.endsWith('List') && resource.items && Array.isArray(resource.items)) {
+            // Process each item in the list
+            for (const item of resource.items) {
+              // For each item, recursively find failing pods and add them to our result
+              const itemResults = findFailingPods(item, ns);
+              result.push(...itemResults);
+            }
+          }
+
+          return result;
+        };
+
+        // Find all failing pods in the resources
+        const failingPods = resources.flatMap((resource) => findFailingPods(resource, namespace));
+
+        // Process each failing pod
+        for (const { namespace, podName } of failingPods) {
+          logger.info(`Processing diagnostics for failing pod: ${namespace}/${podName}`);
+
+          // Fetch diagnostic data for this pod
+          try {
+            // Fetch pod description
+            const podLogLines = config.diagnostics?.podLogTailLines ?? 50;
+            logger.debug(`Fetching description for pod ${namespace}/${podName}`);
+            const describeResult = await deps.describePod(namespace, podName, kubeconfigPath, context);
+
+            // Fetch current logs
+            logger.debug(`Fetching logs for pod ${namespace}/${podName} (${podLogLines} lines)`);
+            const logsResult = await deps.getPodLogs(namespace, podName, podLogLines, false, kubeconfigPath, context);
+
+            // Fetch previous logs (if any)
+            logger.debug(`Fetching previous logs for pod ${namespace}/${podName} (${podLogLines} lines)`);
+            const prevLogsResult = await deps.getPodLogs(
+              namespace,
+              podName,
+              podLogLines,
+              true,
+              kubeconfigPath,
+              context,
+            );
+
+            // Add the diagnostic data to our array
+            podDiagnostics.push({
+              namespace,
+              podName,
+              describeCommand: describeResult.command,
+              description: describeResult.description,
+              logsCommand: logsResult.command,
+              logs: logsResult.logs,
+              prevLogsCommand: prevLogsResult.command,
+              prevLogs: prevLogsResult.logs,
+            });
+          } catch (error) {
+            // If any part of the diagnostic gathering fails, add what we have with an error note
+            logger.warn(`Error gathering diagnostic data for pod ${namespace}/${podName}:`, error);
+
+            podDiagnostics.push({
+              namespace,
+              podName,
+              // Add whatever we have
+              describeCommand: `kubectl describe pod ${podName} -n ${namespace}`,
+              description: 'Error fetching pod description',
+              logsCommand: `kubectl logs ${podName} -n ${namespace} --tail=${config.diagnostics?.podLogTailLines ?? 50}`,
+              logs: 'Error fetching logs',
+              error: error instanceof Error ? error.message : 'Unknown error during diagnostics',
+            });
+          }
+        }
+      } catch (error) {
+        logger.warn(`Error parsing output for pod diagnostics in namespace '${namespace}':`, error);
+      }
+    }
+
+    if (podDiagnostics.length > 0) {
+      logger.info(`Found ${podDiagnostics.length} failing pods requiring diagnostics`);
+    } else {
+      logger.info('No failing pods found that require diagnostics');
+    }
+  } else {
+    logger.debug('Pod diagnostics disabled in config, skipping diagnostics');
+  }
+
+  // --- 4. Generate Output String ---
   progressCallback('Generating output file content...');
   const style = config.output?.style || 'markdown';
   logger.debug(`Using output style: ${style}`);
@@ -251,6 +426,7 @@ export const aggregateResources = async (
       namespaceData,
       resourcesByNamespace,
       fetchedOutputBlocks,
+      podDiagnostics.length > 0 ? podDiagnostics : undefined,
     );
   } catch (error) {
     logger.error('Failed to generate output content.', error);
@@ -258,7 +434,7 @@ export const aggregateResources = async (
   }
   logger.trace('Generated output string length:', outputString.length);
 
-  // --- 4. Write Output to Disk ---
+  // --- 5. Write Output to Disk ---
   const filePath = config.output?.filePath || 'kubemix-output.md';
   progressCallback(`Writing output to ${filePath}...`);
   try {
@@ -269,7 +445,7 @@ export const aggregateResources = async (
     throw error; // Propagate
   }
 
-  // --- 5. Copy to Clipboard (Optional) ---
+  // --- 6. Copy to Clipboard (Optional) ---
   // Assuming the adapted function checks config.output.copyToClipboard
   try {
     await deps.copyToClipboardIfEnabled(outputString, progressCallback, config);
@@ -278,7 +454,7 @@ export const aggregateResources = async (
     logger.warn(`Failed to copy output to clipboard: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
-  // --- 6. Calculate Metrics ---
+  // --- 7. Calculate Metrics ---
   progressCallback('Calculating metrics...');
 
   // Calculate total resources across all types
@@ -292,7 +468,7 @@ export const aggregateResources = async (
   };
   logger.trace('Calculated metrics:', metrics);
 
-  // --- 7. Return Result ---
+  // --- 8. Return Result ---
   logger.info('Kubernetes resource aggregation finished.');
   return metrics;
 };

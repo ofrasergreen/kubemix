@@ -26,6 +26,8 @@ export const run = async () => {
       .option('--include-type <type1,type2,...>', 'Specify resource types to include (comma-separated)')
       .option('--exclude-type <type1,type2,...>', 'Specify resource types to exclude (comma-separated)')
       .option('--no-redact-secrets', 'Disable redaction of Secret data (NOT RECOMMENDED)')
+      .option('--no-diagnostics', 'Disable diagnostics for failing pods')
+      .option('--pod-log-lines <number>', 'Number of log lines to fetch for failing pods (default: 50)')
       .option('-c, --config <path>', 'Path to a custom config file')
       .addOption(new Option('--verbose', 'Enable verbose logging').conflicts('quiet'))
       .addOption(new Option('--quiet', 'Disable informational output').conflicts('verbose'))

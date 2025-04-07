@@ -65,16 +65,34 @@ export const executeKubectlCommand = async (
       throw new KubeAggregatorError(detailedError, 500); // Internal Server Error might be appropriate
     }
 
-    // Log detailed error info for debugging
-    logger.error(`kubectl command "${commandString}" failed:`, error);
-
     // Extract stderr from the error object if possible (execFile error often includes it)
     let stderrOutput = '';
+    let isPreviousContainerError = false;
+
     if (error instanceof Error && 'stderr' in error && typeof error.stderr === 'string') {
       stderrOutput = error.stderr.trim();
-      detailedError = `kubectl command failed: ${stderrOutput || errorMessage}`;
+
+      // Special case for previous container logs - this is an expected error
+      if (
+        commandString.includes('logs') &&
+        commandString.includes('--previous') &&
+        stderrOutput.includes('previous terminated container') &&
+        stderrOutput.includes('not found')
+      ) {
+        // Only log at debug level since this is expected
+        logger.debug(`kubectl command returned expected error: ${stderrOutput || errorMessage}`);
+        isPreviousContainerError = true;
+        detailedError = `kubectl command failed: ${stderrOutput || errorMessage}`;
+      } else {
+        detailedError = `kubectl command failed: ${stderrOutput || errorMessage}`;
+      }
     } else {
       detailedError = `kubectl command failed: ${errorMessage}`;
+    }
+
+    // Log detailed error info at appropriate level
+    if (!isPreviousContainerError) {
+      logger.error(`kubectl command "${commandString}" failed:`, error);
     }
 
     // Throw a user-friendly error
@@ -138,10 +156,10 @@ export const getNamespacesOutput = async (
 
   // Map the outputFormat to kubectl output flag
   const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
-  
-  // Debug output flag explicitly 
+
+  // Debug output flag explicitly
   logger.debug(`Using kubectl output flag: -o ${outputFlag} for namespace list format '${outputFormat}'`);
-  
+
   const args = ['get', 'namespaces', '-o', outputFlag];
 
   try {
@@ -305,10 +323,10 @@ export const getResourcesOutput = async (
   // Build the kubectl command with comma-separated types
   const typeList = types.join(',');
   const outputFlag = outputFormat === 'text' ? 'wide' : outputFormat;
-  
-  // Debug output flag explicitly 
+
+  // Debug output flag explicitly
   logger.debug(`Using kubectl output flag: -o ${outputFlag} for format '${outputFormat}'`);
-  
+
   const args = ['get', typeList, '-n', namespace, '-o', outputFlag];
 
   try {
@@ -338,6 +356,138 @@ export const getResourcesOutput = async (
 
     // Return empty data but with command string for consistency
     return { output: '', command: commandStr };
+  }
+};
+
+/**
+ * Fetches logs for a pod in a specific namespace
+ *
+ * @param namespace - The namespace containing the pod
+ * @param podName - The name of the pod
+ * @param tailLines - Number of log lines to fetch (defaults to 50)
+ * @param previous - Whether to fetch logs from the previous container instance
+ * @param kubeconfigPath - Optional path to a specific kubeconfig file
+ * @param context - Optional specific Kubernetes context to use
+ * @returns Promise resolving with the logs and the command used
+ */
+export const getPodLogs = async (
+  namespace: string,
+  podName: string,
+  tailLines = 50,
+  previous = false,
+  kubeconfigPath?: string,
+  context?: string,
+): Promise<{ logs: string; command: string }> => {
+  logger.debug(
+    `Fetching logs for pod '${podName}' in namespace '${namespace}'${previous ? ' (previous instance)' : ''}...`,
+  );
+
+  // Build args for the kubectl logs command
+  const args = ['logs', podName, '-n', namespace];
+
+  // Add --previous flag if requested
+  if (previous) {
+    args.push('--previous');
+  }
+
+  // Add --tail flag
+  args.push('--tail', tailLines.toString());
+
+  try {
+    const { stdout, command } = await executeKubectlCommand(args, kubeconfigPath, context);
+    return { logs: stdout, command };
+  } catch (error) {
+    // Special handling for previous logs - often fails if no previous container exists
+    if (previous) {
+      // Extract stderr for error checking
+      const stderr =
+        error instanceof Error && 'stderr' in error && typeof error.stderr === 'string' ? error.stderr.trim() : '';
+
+      // Check if this is specifically the "previous container not found" error which is expected
+      const isContainerNotFoundError = stderr.includes('previous terminated container') && stderr.includes('not found');
+
+      // This is a very common, expected error - only log at trace level
+      if (isContainerNotFoundError) {
+        logger.trace(`No previous logs found for pod '${podName}' in namespace '${namespace}' (container not found)`);
+      } else {
+        // Log other errors at warn level (but not error level)
+        logger.warn(
+          `Error fetching previous logs for pod '${podName}' in namespace '${namespace}': ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+
+      // Get the actual command that was executed
+      const commandStr =
+        error instanceof KubectlError && error.command
+          ? error.command
+          : `kubectl logs ${podName} -n ${namespace} --previous --tail=${tailLines}`;
+
+      // Return empty logs but include command for context
+      return { logs: '(No previous container logs available)', command: commandStr };
+    }
+
+    // For current logs, handle error but return useful message
+    logger.warn(`Failed to get logs for pod '${podName}' in namespace '${namespace}':`, error);
+
+    // Create command string for return consistency
+    const commandStr = `kubectl logs ${podName} -n ${namespace} --tail=${tailLines}`;
+
+    // If it's a KubectlError, use its command
+    if (error instanceof KubectlError && error.command) {
+      return { logs: `(Error fetching logs: ${error.message || 'Unknown error'})`, command: error.command };
+    }
+
+    // Return error message but with command string for context
+    return {
+      logs: `(Error fetching logs: ${error instanceof Error ? error.message : 'Unknown error'})`,
+      command: commandStr,
+    };
+  }
+};
+
+/**
+ * Describes a pod in a specific namespace, showing detailed information and events
+ *
+ * @param namespace - The namespace containing the pod
+ * @param podName - The name of the pod
+ * @param kubeconfigPath - Optional path to a specific kubeconfig file
+ * @param context - Optional specific Kubernetes context to use
+ * @returns Promise resolving with the describe output and the command used
+ */
+export const describePod = async (
+  namespace: string,
+  podName: string,
+  kubeconfigPath?: string,
+  context?: string,
+): Promise<{ description: string; command: string }> => {
+  logger.debug(`Describing pod '${podName}' in namespace '${namespace}'...`);
+
+  // Build args for the kubectl describe command
+  const args = ['describe', 'pod', podName, '-n', namespace];
+
+  try {
+    const { stdout, command } = await executeKubectlCommand(args, kubeconfigPath, context);
+    return { description: stdout, command };
+  } catch (error) {
+    // Handle error
+    logger.warn(`Failed to describe pod '${podName}' in namespace '${namespace}':`, error);
+
+    // Create command string for return consistency
+    const commandStr = `kubectl describe pod ${podName} -n ${namespace}`;
+
+    // If it's a KubectlError, use its command
+    if (error instanceof KubectlError && error.command) {
+      return {
+        description: `(Error describing pod: ${error.message || 'Unknown error'})`,
+        command: error.command,
+      };
+    }
+
+    // Return error message but with command string for context
+    return {
+      description: `(Error describing pod: ${error instanceof Error ? error.message : 'Unknown error'})`,
+      command: commandStr,
+    };
   }
 };
 

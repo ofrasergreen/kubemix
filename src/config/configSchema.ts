@@ -57,6 +57,12 @@ const securityConfigSchema = z.object({
   // Add more fine-grained redaction options later
 });
 
+// Schema for diagnostics options
+const diagnosticsConfigSchema = z.object({
+  includeFailingPods: z.boolean().optional().describe('Whether to include diagnostics for failing pods'),
+  podLogTailLines: z.number().int().positive().optional().describe('Number of log lines to fetch for failing pods'),
+});
+
 // --- Base Configuration Schema (Common Structure) ---
 
 // Defines the structure applicable to file config and CLI partial config
@@ -77,6 +83,7 @@ export const kubeAggregatorConfigBaseSchema = z.object({
   kubernetes: kubernetesConfigSchema.strict().optional(),
   filter: filterSchema.strict().optional(),
   security: securityConfigSchema.strict().optional(),
+  diagnostics: diagnosticsConfigSchema.strict().optional(),
 });
 
 // --- Default Configuration Schema ---
@@ -106,6 +113,12 @@ export const kubeAggregatorConfigDefaultSchema = z.object({
   security: securityConfigSchema
     .extend({
       redactSecrets: z.boolean().default(true), // Default to redacting secrets
+    })
+    .default({}),
+  diagnostics: diagnosticsConfigSchema
+    .extend({
+      includeFailingPods: z.boolean().default(true), // Default to including diagnostics for failing pods
+      podLogTailLines: z.number().int().positive().default(50), // Default to 50 lines of logs
     })
     .default({}),
 });

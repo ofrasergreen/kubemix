@@ -20,6 +20,10 @@ export interface CliOptions extends OptionValues {
   // Security Options
   noRedactSecrets?: boolean; // Disable redaction of Secret data
 
+  // Diagnostics Options
+  noDiagnostics?: boolean; // Disable diagnostics for failing pods
+  podLogLines?: number; // Number of log lines to fetch for failing pods
+
   // Configuration Options
   config?: string; // Path to a custom config file
   // init?: boolean; // Add later if needed

@@ -115,3 +115,66 @@ export const getNamespacesToQuery = (
 
   return namespacesToConsider;
 };
+
+/**
+ * Determines if a pod is in a failing state based on its YAML/JSON representation.
+ * A pod is considered "failing" if:
+ * - status.phase is not 'Running' or 'Succeeded'
+ * - status.phase is 'Pending' or 'Failed' or 'Unknown'
+ * - has high restart count or problematic container statuses
+ *
+ * @param podManifest - The pod manifest as a parsed object from YAML/JSON
+ * @returns True if the pod is in a failing state, false otherwise
+ */
+export const isPodFailing = (podManifest: any): boolean => {
+  try {
+    // Check if this is a pod (kind === 'Pod')
+    if (!podManifest || podManifest.kind !== 'Pod') {
+      return false;
+    }
+
+    // Extract status information
+    const status = podManifest.status || {};
+    const phase = status.phase || '';
+
+    // Consider pods failing if they're not Running or Succeeded
+    if (phase !== 'Running' && phase !== 'Succeeded') {
+      logger.debug(`Pod '${podManifest.metadata?.name}' in phase '${phase}' identified as failing`);
+      return true;
+    }
+
+    // Check container statuses for restarts or other issues
+    // For Running pods, we might still want to consider them failing if they have issues
+    const containerStatuses = status.containerStatuses || [];
+    for (const containerStatus of containerStatuses) {
+      // Check for high restart count (more than 3 restarts might indicate a problem)
+      if (containerStatus.restartCount > 3) {
+        logger.debug(
+          `Pod '${podManifest.metadata?.name}' has high restart count (${containerStatus.restartCount}), identified as failing`,
+        );
+        return true;
+      }
+
+      // Check if container is waiting for something (might indicate initialization issues)
+      if (containerStatus.state?.waiting) {
+        const reason = containerStatus.state.waiting.reason || '';
+        // Common problematic waiting reasons
+        const problematicReasons = ['CrashLoopBackOff', 'ImagePullBackOff', 'ErrImagePull', 'CreateContainerError'];
+
+        if (problematicReasons.includes(reason)) {
+          logger.debug(
+            `Pod '${podManifest.metadata?.name}' container waiting with reason '${reason}', identified as failing`,
+          );
+          return true;
+        }
+      }
+    }
+
+    // Pod seems healthy
+    return false;
+  } catch (error) {
+    // If we can't analyze the pod for some reason, default to considering it healthy
+    logger.warn(`Error analyzing pod for failing state: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return false;
+  }
+};

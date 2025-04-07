@@ -13,6 +13,8 @@ interface ContentInfo {
   };
   processing: {
     secretsRedacted: boolean;
+    diagnosticsEnabled: boolean;
+    diagnosticsLogLines?: number;
     // Add other processing flags later
   };
 }
@@ -29,6 +31,8 @@ export const analyzeContent = (config: KubeAggregatorConfigMerged): ContentInfo 
     },
     processing: {
       secretsRedacted: config.security?.redactSecrets ?? true, // Default to true
+      diagnosticsEnabled: config.diagnostics?.includeFailingPods !== false, // Default to true
+      diagnosticsLogLines: config.diagnostics?.podLogTailLines || 50, // Default to 50
     },
   };
 };
@@ -50,6 +54,9 @@ export const generateHeader = (config: KubeAggregatorConfigMerged, generationDat
   const processingNotes = [];
   if (info.processing.secretsRedacted) {
     processingNotes.push('Secret data has been redacted');
+  }
+  if (info.processing.diagnosticsEnabled) {
+    processingNotes.push('Diagnostics for failing pods included');
   }
   // Add other processing notes later
 
@@ -127,6 +134,13 @@ export const generateSummaryNotes = (config: KubeAggregatorConfigMerged): string
   }
 
   // Processing notes
+  if (info.processing.diagnosticsEnabled) {
+    notes.push(
+      `- Diagnostics for failing pods included (${info.processing.diagnosticsLogLines} log lines per container)`,
+    );
+  } else {
+    notes.push('- Diagnostics for failing pods disabled');
+  }
   if (info.processing.secretsRedacted) {
     notes.push('- Sensitive data within Secret resources has been redacted.');
   }

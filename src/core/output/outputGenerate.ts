@@ -7,7 +7,7 @@ import Handlebars from 'handlebars';
 import type { KubeAggregatorConfigMerged } from '../../config/configSchema.js';
 import { KubeAggregatorError } from '../../shared/errorHandle.js';
 import { logger } from '../../shared/logger.js';
-import type { OutputGeneratorContext, RenderContext } from './outputGeneratorTypes.js';
+import type { OutputGeneratorContext, PodDiagnostics, RenderContext } from './outputGeneratorTypes.js';
 // Import adapted decorator functions
 import {
   generateHeader,
@@ -42,9 +42,13 @@ const createRenderContext = (outputGeneratorContext: OutputGeneratorContext): Re
     // Multi-resource data
     resources: outputGeneratorContext.resources,
 
+    // Pod diagnostics (FRD-6)
+    podDiagnostics: outputGeneratorContext.podDiagnostics,
+
     // Flags based on config (assuming these options exist or will be added)
     preambleEnabled: true, // Default to true for v1
     resourceTreeEnabled: true, // Default to true for v1
+    diagnosticsEnabled: config.diagnostics?.includeFailingPods !== false, // Enable if not explicitly disabled
 
     // Legacy fields for backward compatibility, will be deprecated
     resourceKind: outputGeneratorContext.resourceKind,
@@ -106,6 +110,8 @@ export const generateOutput = async (
   fetchedOutputBlocks?:
     | Array<{ namespace: string; command: string; output: string }>
     | Record<string, { output: string; command: string }>, // Output data for namespaces
+  // --- Extended for FRD-6 ---
+  podDiagnostics?: PodDiagnostics[], // Diagnostic data for failing pods
   // --- Dependencies can be injected for testing ---
   deps = {
     buildOutputGeneratorContext,
@@ -123,6 +129,7 @@ export const generateOutput = async (
     namespaceData,
     resourcesByNamespace,
     fetchedOutputBlocks,
+    podDiagnostics,
   );
 
   // Create the specific context needed for Handlebars rendering
@@ -148,6 +155,7 @@ export const buildOutputGeneratorContext = async (
   outputData?:
     | Array<{ namespace: string; command: string; output: string }>
     | Record<string, { output: string; command: string }>,
+  podDiagnostics?: PodDiagnostics[],
 ): Promise<OutputGeneratorContext> => {
   // For v1, we don't implement instruction files
   const repositoryInstruction = '';
@@ -203,6 +211,8 @@ export const buildOutputGeneratorContext = async (
     instruction: repositoryInstruction,
     // Multi-resource data
     resources,
+    // Pod diagnostics (FRD-6)
+    podDiagnostics,
     // Legacy fields for backward compatibility
     resourceKind: 'Namespaces',
     kubectlCommand: namespaceData.command,

@@ -21,6 +21,31 @@ export interface NamespaceResourceBlock {
   output: string; // The output content containing multiple resource types
 }
 
+/**
+ * Represents diagnostic information for a failing pod.
+ * Used by FRD-6 to capture detailed information for troubleshooting.
+ */
+export interface PodDiagnostics {
+  // Pod identification
+  namespace: string;
+  podName: string;
+
+  // Describe output
+  describeCommand: string;
+  description: string;
+
+  // Current logs
+  logsCommand: string;
+  logs: string;
+
+  // Previous logs (may not be available)
+  prevLogsCommand?: string;
+  prevLogs?: string;
+
+  // Error information if any diagnostic command failed
+  error?: string;
+}
+
 // Data context for generating the entire output file
 export interface OutputGeneratorContext {
   generationDate: string;
@@ -32,6 +57,9 @@ export interface OutputGeneratorContext {
   // 1. ResourceData (for global resources like Namespaces)
   // 2. NamespaceResourceBlock (for per-namespace resources from FRD-3)
   resources: (ResourceData | NamespaceResourceBlock)[];
+
+  // Diagnostics for failing pods (FRD-6)
+  podDiagnostics?: PodDiagnostics[];
 
   // --- Legacy fields for backward compatibility, will be deprecated ---
   resourceKind?: string; // e.g., "Namespaces"
@@ -55,9 +83,13 @@ export interface RenderContext {
   // 2. NamespaceResourceBlock (for per-namespace resources from FRD-3)
   readonly resources: ReadonlyArray<ResourceData | NamespaceResourceBlock>;
 
+  // Diagnostics for failing pods (FRD-6)
+  readonly podDiagnostics?: ReadonlyArray<PodDiagnostics>;
+
   // --- Flags based on config ---
   readonly preambleEnabled: boolean; // Controls if the summary section is included
   readonly resourceTreeEnabled: boolean; // Controls if the overview section is included
+  readonly diagnosticsEnabled: boolean; // Controls if the diagnostics section is included
 
   // --- Legacy fields for backward compatibility, will be deprecated ---
   readonly resourceKind?: string;
