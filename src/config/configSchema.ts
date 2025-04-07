@@ -63,6 +63,11 @@ const diagnosticsConfigSchema = z.object({
   podLogTailLines: z.number().int().positive().optional().describe('Number of log lines to fetch for failing pods'),
 });
 
+// Schema for token counting options
+const tokenCountConfigSchema = z.object({
+  encoding: z.string().optional().describe('Encoding to use for token counting (e.g., o200k_base, cl100k_base)'),
+});
+
 // --- Base Configuration Schema (Common Structure) ---
 
 // Defines the structure applicable to file config and CLI partial config
@@ -84,6 +89,7 @@ export const kubeAggregatorConfigBaseSchema = z.object({
   filter: filterSchema.strict().optional(),
   security: securityConfigSchema.strict().optional(),
   diagnostics: diagnosticsConfigSchema.strict().optional(),
+  tokenCount: tokenCountConfigSchema.strict().optional(),
 });
 
 // --- Default Configuration Schema ---
@@ -119,6 +125,11 @@ export const kubeAggregatorConfigDefaultSchema = z.object({
     .extend({
       includeFailingPods: z.boolean().default(true), // Default to including diagnostics for failing pods
       podLogTailLines: z.number().int().positive().default(50), // Default to 50 lines of logs
+    })
+    .default({}),
+  tokenCount: tokenCountConfigSchema
+    .extend({
+      encoding: z.string().default('o200k_base'), // Default to o200k_base encoding (GPT-4o)
     })
     .default({}),
 });

@@ -14,7 +14,10 @@ export interface AggregationResult {
   // New fields for FRD-3
   resourceCounts?: Record<string, number>; // Map of resource kind to count
   totalResourceCount?: number; // Total resources across all types
-  // Add other relevant metrics later (total size, etc.)
+  // Fields for FRD-7
+  totalCharacters?: number; // Total character count of the output
+  totalTokens?: number; // Estimated token count of the output
+  secretsFound?: boolean; // Whether secrets were found and redacted (if enabled)
 }
 
 /**
@@ -43,14 +46,7 @@ export const runNamespacesAction = async (options: CliOptions): Promise<void> =>
 
   // --- Output Summary ---
   logger.log('');
-  printSummary(
-    metrics.namespaceCount,
-    config.output?.filePath || 'kubemix-output.md',
-    config,
-    metrics.podCount,
-    metrics.resourceCounts,
-    metrics.totalResourceCount,
-  );
+  printSummary(metrics, config);
   logger.log('');
   printCompletion();
 };

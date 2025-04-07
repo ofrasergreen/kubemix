@@ -4,6 +4,7 @@ import * as yaml from 'yaml';
 import type { AggregationResult } from '../cli/actions/namespaceAction.js'; // Use the result type defined in the action
 // --- Adapted Kubernetes Config/Types ---
 import type { KubeAggregatorConfigMerged } from '../config/configSchema.js'; // Renamed
+import { TokenCounter } from './tokenCount/tokenCount.js';
 
 // --- Adapted Kubernetes Core Modules ---
 import * as kubectlWrapper from './kubernetes/kubectlWrapper.js';
@@ -418,6 +419,10 @@ export const aggregateResources = async (
   progressCallback('Generating output file content...');
   const style = config.output?.style || 'markdown';
   logger.debug(`Using output style: ${style}`);
+
+  // Initialize token counter
+  const tokenCounter = new TokenCounter(config.tokenCount?.encoding || 'o200k_base');
+
   let outputString: string;
   try {
     outputString = await deps.generateOutput(
@@ -430,9 +435,28 @@ export const aggregateResources = async (
     );
   } catch (error) {
     logger.error('Failed to generate output content.', error);
+    // Free token counter resources
+    tokenCounter.free();
     throw error; // Propagate
   }
-  logger.trace('Generated output string length:', outputString.length);
+
+  // Calculate metrics on the output
+  const totalCharacters = outputString.length;
+  let totalTokens = 0;
+
+  try {
+    // Count tokens
+    progressCallback('Calculating token count...');
+    totalTokens = tokenCounter.countTokens(outputString);
+    logger.debug(`Calculated token count: ${totalTokens.toLocaleString()} tokens`);
+  } catch (error) {
+    logger.warn('Failed to calculate token count:', error);
+    // Non-critical error, continue with process
+  }
+
+  logger.trace(
+    `Generated output string length: ${totalCharacters.toLocaleString()} chars, ~${totalTokens.toLocaleString()} tokens`,
+  );
 
   // --- 5. Write Output to Disk ---
   const filePath = config.output?.filePath || 'kubemix-output.md';
@@ -460,15 +484,30 @@ export const aggregateResources = async (
   // Calculate total resources across all types
   const totalResources = Object.values(totalResourceCounts).reduce((sum, count) => sum + count, 0);
 
+  // Determine if secrets were found and processed
+  // This is a simplification - a more accurate implementation would track if secrets were actually found
+  const secretsFound = config.security?.redactSecrets === true;
+
   const metrics: AggregationResult = {
     namespaceCount: namespaceNames.length,
     resourceCounts: totalResourceCounts,
     totalResourceCount: totalResources,
-    // Add totalYamlSize etc. later
+    // Add token counting metrics (FRD-7)
+    totalCharacters,
+    totalTokens,
+    secretsFound,
   };
   logger.trace('Calculated metrics:', metrics);
 
   // --- 8. Return Result ---
   logger.info('Kubernetes resource aggregation finished.');
+
+  // Free token counter resources
+  try {
+    tokenCounter.free();
+  } catch (error) {
+    logger.debug('Error freeing token counter resources:', error);
+  }
+
   return metrics;
 };
